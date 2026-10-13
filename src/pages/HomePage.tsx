@@ -1,303 +1,152 @@
-import { useEffect, useState } from 'react';
-import {
-  ArrowRight,
-  BookOpen,
-  CalendarDays,
-  Check,
-  Clock3,
-  Gamepad2,
-  Languages,
-  Sparkles,
-} from 'lucide-react';
-import { getStudyHistory } from '@/backend/study-history';
-import type { StudyRecord } from '@/backend/study-history';
-import { LeafMark } from '@/components/AppLayout';
-import { mockNewsArticles } from '@/data/mockData';
+import { ArrowRight } from 'lucide-react';
 import { useLanguage } from '@/i18n/useLanguage';
 import type { User } from '@/types/auth';
 import type { Route } from '@/types/navigation';
 
-const learningPaths = [
-  {
-    number: '01',
-    kicker: 'NGHE · NÓI · HIỂU',
-    title: 'Tra từ điển',
-    description: 'Khám phá cách tra từ và đối chiếu nghĩa theo từng cụm.',
-    action: 'Khám phá từ mới',
-    actionArt: '🔎',
-    route: 'translate',
-    Icon: Languages,
-    tone: 'blue',
-  },
-  {
-    number: '02',
-    kicker: 'GHI NHỚ MỖI NGÀY',
-    title: 'Từ vựng của tôi',
-    description: 'Xem lại từ mới và quản lý sổ tay học tập của bạn.',
-    action: 'Ghi nhớ ngay',
-    actionArt: '✏️',
-    route: 'vocabulary',
-    Icon: BookOpen,
-    tone: 'gold',
-  },
-  {
-    number: '03',
-    kicker: 'TIẾN BỘ TỪNG BƯỚC',
-    title: 'Luyện tập',
-    description: 'Ôn nghĩa qua những câu hỏi ngắn, nhẹ nhàng mỗi ngày.',
-    action: 'Bắt đầu kiểm tra',
-    actionArt: '🎮',
-    route: 'practice',
-    Icon: Gamepad2,
-    tone: 'green',
-  },
-] as const;
+type HubCard = {
+  route: Route;
+  title: string;
+  description: string;
+  tone: 'mint' | 'sky' | 'sand';
+  Art: () => JSX.Element;
+};
 
-function StoryArtwork({ index }: { index: number }) {
+function MicArt() {
   return (
-    <svg className={`story-art story-art-${index + 1}`} viewBox="0 0 400 220" role="img" aria-label="">
-      <defs>
-        <linearGradient id={`story-sky-${index}`} x1="0" x2="0" y1="0" y2="1">
-          <stop offset="0" stopColor={index === 1 ? '#9bcde0' : '#c7e6dd'} />
-          <stop offset="1" stopColor={index === 1 ? '#eff2da' : '#f5efd2'} />
-        </linearGradient>
-      </defs>
-      <path fill={`url(#story-sky-${index})`} d="M0 0h400v220H0z" />
-      <circle cx={index === 1 ? 315 : 74} cy="49" r="23" fill="#ffe39a" opacity=".9" />
-      <path d="m0 133 85-73 73 69 85-91 157 113v69H0Z" fill="#75a997" />
-      <path d="m0 154 101-49 76 52 102-78 121 65v76H0Z" fill="#357d67" />
-      {index === 0 && (
-        <>
-          <path d="M0 171c99-31 184-7 270 49H0Z" fill="#d7a647" />
-          <path d="M0 188c103-31 193-4 249 32H0Z" fill="#f4ce64" />
-          <path d="M244 142h70v54h-70z" fill="#eee0bd" />
-          <path d="m234 145 45-36 48 36Z" fill="#884c38" />
-          <path d="M257 159h14v20h-14zm27 0h14v20h-14z" fill="#4c7565" />
-          <path d="M71 137v44m20-49v52m21-44v48m22-35v41" stroke="#f4ecd7" strokeWidth="4" opacity=".8" />
-        </>
-      )}
-      {index === 1 && (
-        <>
-          <path d="M0 178c95-30 180-25 263 42H0Z" fill="#d8bb70" />
-          <path d="M37 151h116v61H37z" fill="#b88a59" />
-          <path d="m25 155 68-56 74 56Z" fill="#554c3d" />
-          <path d="M79 172h29v40H79z" fill="#70563b" />
-          <path d="M48 164h20v19H48zm71 0h20v19h-20z" fill="#c6dfd1" />
-          <path d="M0 202c119-19 206-14 293 18H0Z" fill="#668d51" />
-        </>
-      )}
-      {index === 2 && (
-        <>
-          <path d="M0 160c100-39 236-22 400 16v44H0Z" fill="#80a956" />
-          <path d="M0 182c112-35 249-15 400 17v21H0Z" fill="#b7bd62" />
-          <path d="M0 205c133-32 271-5 400 10v5H0Z" fill="#e3cc7b" />
-          <path d="M58 147h58v44H58z" fill="#d8c9a0" />
-          <path d="m49 150 38-30 39 30Z" fill="#5b5140" />
-          <path d="M79 164h15v27H79z" fill="#536c58" />
-          <path d="M206 153h49v36h-49z" fill="#ddd0aa" />
-          <path d="m199 155 31-25 33 25Z" fill="#5b5140" />
-        </>
-      )}
-      <path d="M0 216c99-13 202-12 400 0v4H0Z" fill="#145b49" opacity=".65" />
+    <svg viewBox="0 0 200 120" aria-hidden="true">
+      <path d="M0 96c40-18 62-6 100-12s70-18 100-6v42H0Z" fill="#cfe8dd" />
+      <path d="M0 108c50-14 80 0 118-6s54-10 82-2v20H0Z" fill="#b6dccb" />
+      <g stroke="#7cc2a6" strokeWidth="4" strokeLinecap="round">
+        <path d="M30 60v16M42 52v32M54 58v20M146 58v20M158 52v32M170 60v16" />
+      </g>
+      <rect x="84" y="14" width="32" height="56" rx="16" fill="#1f6b53" />
+      <path d="M72 52v6a28 28 0 0 0 56 0v-6" fill="none" stroke="#1f6b53" strokeWidth="6" strokeLinecap="round" />
+      <path d="M100 86v14M84 100h32" stroke="#1f6b53" strokeWidth="6" strokeLinecap="round" />
     </svg>
   );
 }
 
-function ProgressMeter({
-  label,
-  complete,
-  total,
-}: {
-  label: string;
-  complete: number;
-  total: number;
-}) {
-  const percentage = Math.round((complete / total) * 100);
+function ChatArt() {
   return (
-    <div className="home-progress-meter">
-      <div className="home-progress-label">
-        <span>{label}: {complete} / {total}</span>
-        <strong>{percentage}%</strong>
-      </div>
-      <div
-        className="home-progress-track"
-        role="progressbar"
-        aria-label={label}
-        aria-valuenow={complete}
-        aria-valuemin={0}
-        aria-valuemax={total}
-      >
-        <span style={{ width: `${percentage}%` }} />
-      </div>
-    </div>
+    <svg viewBox="0 0 200 120" aria-hidden="true">
+      <path d="M0 98c44-14 70-2 104-8s60-14 96-4v34H0Z" fill="#cfe8e4" />
+      <path d="M0 110c52-12 84 0 124-6s48-8 76-2v18H0Z" fill="#b5dbd5" />
+      <path d="M58 22h84a16 16 0 0 1 16 16v32a16 16 0 0 1-16 16h-48l-24 20v-20H58a16 16 0 0 1-16-16V38a16 16 0 0 1 16-16Z" fill="#1f6b53" />
+      <circle cx="78" cy="54" r="6.5" fill="#fff" />
+      <circle cx="100" cy="54" r="6.5" fill="#fff" />
+      <circle cx="122" cy="54" r="6.5" fill="#fff" />
+      <path d="M158 14l4 10 10 4-10 4-4 10-4-10-10-4 10-4Z" fill="#f3c644" />
+      <path d="M40 18l2.5 6 6 2.5-6 2.5-2.5 6-2.5-6-6-2.5 6-2.5Z" fill="#9fd3c0" />
+    </svg>
   );
 }
 
-export function HomePage({ onNavigate, user }: { onNavigate: (route: Route) => void; user: User | null }) {
-  const { language, t } = useLanguage();
-  const [recentRecords, setRecentRecords] = useState<StudyRecord[]>([]);
-  const [historyError, setHistoryError] = useState('');
+function BookArt() {
+  return (
+    <svg viewBox="0 0 200 120" aria-hidden="true">
+      <path d="M0 96h200v24H0Z" fill="#f1e4c3" />
+      <path d="M0 100l8-5 8 5 8-5 8 5 8-5 8 5 8-5 8 5 8-5 8 5 8-5 8 5 8-5 8 5 8-5 8 5 8-5 8 5 8-5 8 5 8-5 8 5 8-5 8 5 8-5v20H0Z" fill="#e6d3a2" />
+      <ellipse cx="102" cy="100" rx="64" ry="6" fill="#d9c58f" opacity=".6" />
+      <rect x="54" y="12" width="82" height="84" rx="8" fill="#14503f" />
+      <rect x="58" y="12" width="78" height="84" rx="8" fill="#1f6b53" />
+      <path d="M62 12v84" stroke="#14503f" strokeWidth="3" />
+      <path d="M70 12h13v30l-6.5-6-6.5 6Z" fill="#f3c644" />
+      <rect x="94" y="46" width="62" height="46" rx="6" fill="#fbf5e0" />
+      <rect x="94" y="46" width="62" height="46" rx="6" fill="none" stroke="#e6d3a2" strokeWidth="2" />
+      <rect x="102" y="55" width="26" height="5" rx="2.5" fill="#cdb878" />
+      <rect x="102" y="66" width="44" height="4" rx="2" fill="#e6d3a2" />
+      <rect x="102" y="75" width="38" height="4" rx="2" fill="#e6d3a2" />
+      <rect x="102" y="84" width="30" height="4" rx="2" fill="#e6d3a2" />
+    </svg>
+  );
+}
 
-  useEffect(() => {
-    try {
-      setRecentRecords(getStudyHistory(user?.id).slice(0, 3));
-      setHistoryError('');
-    } catch (error) {
-      setHistoryError(error instanceof Error ? error.message : 'Không thể đọc lịch sử học tập.');
-    }
-  }, [user?.id]);
+const cards: HubCard[] = [
+  { route: 'translate', title: 'Dịch giọng nói', description: 'Nói tiếng địa phương, nhận bản dịch Quốc ngữ', tone: 'mint', Art: MicArt },
+  { route: 'ai-assistant', title: 'Trợ lý AI', description: 'Hỏi bài, luyện giao tiếp và hiểu từ khó', tone: 'sky', Art: ChatArt },
+  { route: 'vocabulary', title: 'Sổ từ vựng & Ôn tập', description: 'Lưu từ mới và luyện lại những gì đã học', tone: 'sand', Art: BookArt },
+];
+
+function SkyArt() {
+  return (
+    <svg className="hub-sky-art" viewBox="0 0 520 260" aria-hidden="true">
+      <path d="M0 200 120 90l70 62 90-100 120 120 60-40 60 68v58H0Z" fill="#dfe9dc" />
+      <path d="M0 226 100 140l90 62 110-80 130 100 90-60v92H0Z" fill="#cbdcc9" />
+      <g fill="#8c6a3f">
+        <path d="M296 168h96l12 14h-120Z" />
+        <path d="M356 150h80l10 14h-100Z" />
+      </g>
+      <g fill="#f3e6c4">
+        <path d="M306 182h76v28h-76Z" />
+        <path d="M366 164h60v26h-60Z" />
+      </g>
+      <g stroke="#6b4f2c" strokeWidth="4" strokeLinecap="round">
+        <path d="M312 210v22M332 210v22M352 210v22M372 210v22M372 190v42M392 190v42M412 190v42" />
+      </g>
+      <g fill="#7fa86a">
+        <circle cx="470" cy="190" r="24" />
+        <circle cx="492" cy="206" r="18" />
+        <circle cx="262" cy="204" r="16" />
+      </g>
+      <path d="M470 214v30M262 218v26" stroke="#5b7f4d" strokeWidth="5" />
+    </svg>
+  );
+}
+
+function OrnamentArt() {
+  return (
+    <svg className="hub-ornament" viewBox="0 0 120 120" aria-hidden="true">
+      <g fill="none" stroke="#e5cf93" strokeWidth="3">
+        <path d="M60 6 114 60 60 114 6 60Z" />
+        <path d="M60 24 96 60 60 96 24 60Z" />
+        <path d="M60 42 78 60 60 78 42 60Z" />
+        <path d="M60 6v108M6 60h108" />
+      </g>
+    </svg>
+  );
+}
+
+function LandscapeArt() {
+  return (
+    <svg className="hub-landscape" viewBox="0 0 1200 200" preserveAspectRatio="none" aria-hidden="true">
+      <path d="M0 120c120-40 220-30 340-8s240 8 340-14 360-30 520 8v94H0Z" fill="#e4eddc" />
+      <path d="M0 150c160-30 300-20 460 0s300 10 420-6 220-14 320 4v52H0Z" fill="#cfe0c8" />
+      <path d="M0 184c200-18 420-10 640-2s380-6 560-12v30H0Z" fill="#b9d3b2" />
+      <g fill="#8fb583">
+        <path d="M60 200c4-40 16-70 40-90-8 34-4 62 6 90Z" />
+        <path d="M1090 200c-2-44-14-74-44-96 10 36 6 66-8 96Z" />
+      </g>
+    </svg>
+  );
+}
+
+export function HomePage({ onNavigate }: { onNavigate: (route: Route) => void; user: User | null }) {
+  const { t } = useLanguage();
 
   return (
-    <div className="home-page">
-      <section className="home-hero">
-        <div className="home-hero-copy">
-          <div className="home-hero-kicker">
-            <span />
-            {t('Mỗi ngày một chút, hiểu thêm một lời.')}
-          </div>
-          <h1>
-            {t('Hành trình kết nối ngôn ngữ')}
-            <em>{t('Tày - Mường')}</em>
-          </h1>
-          <p>{t('Khám phá ngôn ngữ địa phương, học từ mới và kết nối với tri thức mỗi ngày.')}</p>
-          <div className="home-hero-actions">
-            <button className="home-hero-primary" onClick={() => onNavigate('translate')}>
-              <Languages size={20} /> {t('Khám phá ngay')} <ArrowRight size={19} />
-            </button>
-            <button className="home-hero-secondary" onClick={() => onNavigate('practice')}>
-              <Sparkles size={18} /> {t('Ôn tập nhanh')}
-            </button>
-          </div>
-        </div>
-        <div className="home-hero-art" aria-hidden="true">
-          <span className="home-art-orbit home-art-orbit-one" />
-          <span className="home-art-orbit home-art-orbit-two" />
-          <span className="home-art-circle"><LeafMark large /></span>
-          <span className="home-art-tag home-art-tag-top"><Languages size={15} /> {t('Tày · Mường')}</span>
-          <span className="home-art-tag home-art-tag-bottom"><BookOpen size={15} /> {t('Học từ ngữ cảnh')}</span>
-        </div>
+    <div className="hub-page">
+      <SkyArt />
+      <OrnamentArt />
+      <LandscapeArt />
+
+      <section className="hub-intro">
+        <div className="hub-kicker">{t('Cùng Aethera xóa bỏ rào cản ngôn ngữ – Giúp bạn tự tin học tập mỗi ngày')}</div>
+        <h1>{t('Hôm nay bạn muốn làm gì?')}</h1>
+        <p>{t('Chọn một cách để bắt đầu học và sử dụng tiếng Tày–Mường.')}</p>
       </section>
 
-      {historyError && <div className="notice" role="alert">{t(historyError)}</div>}
-
-      <section className="home-journey">
-        <div className="home-section-heading home-journey-heading">
-          <div>
-            <div className="home-section-kicker"><span /> {t('Bắt đầu hành trình')}</div>
-            <h2>{t('Học theo cách của bạn')}</h2>
-          </div>
-          <p>{t('Ba công cụ đơn giản để khám phá từ mới và luyện tập mỗi ngày.')}</p>
-        </div>
-        <div className="home-journey-grid">
-          {learningPaths.map(({ number, kicker, title, description, action, actionArt, route, Icon, tone }) => (
-            <article
-              key={route}
-              className={`home-journey-card home-journey-${tone}`}
-            >
-              <span className="home-journey-number">{number}</span>
-              <span className="home-journey-icon"><Icon size={23} strokeWidth={2.2} /></span>
-              <span className="home-journey-kicker">{t(kicker)}</span>
-              <strong className="home-journey-title">{t(title)}</strong>
-              <span className="home-journey-description">{t(description)}</span>
-              <button className="home-journey-cta" type="button" onClick={() => onNavigate(route)}>
-                <span className="home-journey-cta-label">{t(action)}</span>
-                <span className="home-journey-cta-art" aria-hidden="true">
-                  {actionArt}
-                  {tone === 'green' && <span className="home-journey-cta-check">✓</span>}
-                </span>
-                <ArrowRight className="home-journey-cta-arrow" size={18} />
-              </button>
-            </article>
-          ))}
-        </div>
-      </section>
-
-      <section className="home-activity-grid">
-        <div className="home-recent-panel">
-          <div className="home-panel-heading">
-            <div>
-              <div className="home-section-kicker"><span /> {t('Dấu chân học tập')}</div>
-              <h2>{t('Lịch sử tra từ gần đây')}</h2>
-            </div>
-            <span className="home-panel-badge">{recentRecords.length} {t('lượt tra')}</span>
-          </div>
-          {recentRecords.length ? (
-            <div className="home-recent-list">
-              {recentRecords.map((record) => (
-                <button key={record.id} className="home-recent-row" onClick={() => onNavigate('history')}>
-                  <span className="home-recent-icon"><Languages size={20} /></span>
-                  <span className="home-recent-copy">
-                    <strong>{record.source}</strong>
-                    <small>{t(record.language === 'tay' ? 'Tiếng Tày' : 'Tiếng Mường')} · {t('Nhấn để xem chi tiết')}</small>
-                  </span>
-                  <span className="home-recent-time">
-                    {new Date(record.createdAt).toLocaleTimeString(language === 'en' ? 'en-US' : 'vi-VN', {
-                      hour: '2-digit',
-                      minute: '2-digit',
-                    })}
-                    <ArrowRight size={16} />
-                  </span>
-                </button>
-              ))}
-            </div>
-          ) : (
-            <div className="home-recent-empty">
-              <span className="home-empty-icon"><Clock3 size={22} /></span>
-              <div>
-                <strong>{t('Hành trình của bạn bắt đầu từ đây')}</strong>
-                <p>{t('Những lượt tra từ đầu tiên sẽ được lưu tại thiết bị này.')}</p>
-              </div>
-              <button onClick={() => onNavigate('translate')}>{t('Tra từ')} <ArrowRight size={17} /></button>
-            </div>
-          )}
-        </div>
-
-        <aside className="home-progress-panel">
-          <div className="home-progress-heading">
-            <div>
-              <div className="home-section-kicker"><span /> {t('Dấu chân học tập')}</div>
-              <h2>{t('Tiến trình học tập hôm nay')}</h2>
-            </div>
-            <span className="home-progress-badge">{t('7 ngày')}</span>
-          </div>
-          <div className="home-goal-card">
-            <div>
-              <span>{t('Mục tiêu hôm nay')}</span>
-              <strong>{t('10 từ mới')}</strong>
-            </div>
-            <strong className="home-goal-percent">70%</strong>
-          </div>
-          <ProgressMeter label={t('Số từ đã học')} complete={7} total={10} />
-          <ProgressMeter label={t('Số từ đã ôn')} complete={3} total={5} />
-          <div className="home-progress-message">
-            <Check size={18} />
-            <span>{t('Bạn chỉ còn')} <strong>3 {t('từ nữa')}</strong> {t('để hoàn thành mục tiêu hôm nay.')}</span>
-          </div>
-          <span className="home-demo-caption">{t('Tiến trình minh họa cho bản demo')}</span>
-        </aside>
-      </section>
-
-      <section className="home-stories">
-        <div className="home-section-heading">
-          <div>
-            <div className="home-section-kicker"><span /> {t('Câu chuyện bản địa')}</div>
-            <h2>{t('Khám phá văn hóa & tin tức')}</h2>
-            <p>{t('Những câu chuyện về ngôn ngữ, con người và tri thức cộng đồng.')}</p>
-          </div>
-          <button className="home-stories-link" onClick={() => onNavigate('news')}>
-            {t('Xem tất cả')} <ArrowRight size={18} />
-          </button>
-        </div>
-        <div className="home-story-grid">
-          {mockNewsArticles.map((article, index) => (
-            <button key={article.id} className="home-story-card" onClick={() => onNavigate('news')}>
-              <span className="home-story-art"><StoryArtwork index={index} /></span>
-              <span className={`home-story-category home-story-category-${article.accent}`}>{t(article.category)}</span>
-              <strong>{t(article.title)}</strong>
-              <span className="home-story-meta"><CalendarDays size={15} /> {t(article.readTime)}</span>
+      <section className="hub-cards" aria-label={t('Lối tắt chính')}>
+        {cards.map(({ route, title, description, tone, Art }) => (
+          <article key={route} className={`hub-card hub-card-${tone}`}>
+            <div className="hub-card-art"><Art /></div>
+            <h2>{t(title)}</h2>
+            <p>{t(description)}</p>
+            <button type="button" className="hub-card-cta" onClick={() => onNavigate(route)}>
+              <span>{t('Bắt đầu ngay')}</span>
+              <span className="hub-card-cta-arrow"><ArrowRight size={17} strokeWidth={2.6} /></span>
             </button>
-          ))}
-        </div>
+          </article>
+        ))}
       </section>
     </div>
   );

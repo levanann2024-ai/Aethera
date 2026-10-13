@@ -1,3 +1,4 @@
+import { getSettings } from '@/backend/settings';
 import { useEffect, useMemo, useState } from 'react';
 import { ArrowRight, BookOpen, Check, RotateCcw, Sparkles } from 'lucide-react';
 import { searchDictionary } from '@/backend/api';
@@ -17,7 +18,7 @@ type QuizQuestion = {
 
 export function PracticePage({ onNavigate }: { onNavigate: (route: Route) => void }) {
   const { t } = useLanguage();
-  const [language, setLanguage] = useState<SourceLanguage>('tay');
+  const [language, setLanguage] = useState<SourceLanguage>(() => getSettings().defaultLanguage);
   const [entries, setEntries] = useState<DictionaryEntry[]>([]);
   const [questionIndex, setQuestionIndex] = useState(0);
   const [selected, setSelected] = useState('');

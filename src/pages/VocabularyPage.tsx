@@ -1,17 +1,40 @@
-import { useEffect, useState } from 'react';
+import { getSettings } from '@/backend/settings';
+import { useEffect, useMemo, useState } from 'react';
 import type { ChangeEvent, FormEvent } from 'react';
-import { BookOpen, Download, FileUp, Lightbulb, Search, Volume2 } from 'lucide-react';
+import { BookOpen, Download, FileUp, Layers, Lightbulb, Pin, Search, Volume2 } from 'lucide-react';
 import { addDictionaryEntry, importDictionary, searchDictionary } from '@/backend/api';
 import { parseDictionaryCsv } from '@/backend/dictionary-csv';
-import { DataPageShell } from '@/components/AppLayout';
+import { useVocabularyProgress } from '@/backend/vocabulary-progress';
 import { useLanguage } from '@/i18n/useLanguage';
 import type { User } from '@/types/auth';
 import type { DictionaryEntry, SourceLanguage } from '@/types/dictionary';
+import { FlashcardMode } from './review/FlashcardMode';
+import { ListenMode } from './review/ListenMode';
+import { QuizMode } from './review/QuizMode';
+import { ReviewModes } from './review/ReviewModes';
+import { buildDeck, speakText } from './review/reviewUtils';
+import type { ReviewMode } from './review/reviewUtils';
+import './vocabulary.css';
+
+type View = 'list' | 'modes' | ReviewMode;
+type StatusFilter = 'all' | 'pinned' | 'todo' | 'done';
+
+const statusFilters: { id: StatusFilter; label: string }[] = [
+  { id: 'all', label: 'Tất cả' },
+  { id: 'pinned', label: 'Đã ghim' },
+  { id: 'todo', label: 'Chưa thuộc' },
+  { id: 'done', label: 'Đã thuộc' },
+];
 
 export function VocabularyPage({ user }: { user: User | null }) {
   const { t } = useLanguage();
-  const [language, setLanguage] = useState<SourceLanguage>('tay');
+  const { pinned, learned, setPinned, setLearned } = useVocabularyProgress();
+  const [view, setView] = useState<View>('list');
+  const [deck, setDeck] = useState<DictionaryEntry[]>([]);
+  const [usePinnedDeck, setUsePinnedDeck] = useState(false);
+  const [language, setLanguage] = useState<SourceLanguage>(() => getSettings().defaultLanguage);
   const [query, setQuery] = useState('');
+  const [status, setStatus] = useState<StatusFilter>('all');
   const [entries, setEntries] = useState<DictionaryEntry[]>([]);
   const [sourceTerm, setSourceTerm] = useState('');
   const [meaning, setMeaning] = useState('');
@@ -27,25 +50,32 @@ export function VocabularyPage({ user }: { user: User | null }) {
     let active = true;
     setLoading(true);
     setError('');
-    setEntries([]);
-    searchDictionary(language, query)
-      .then((result) => {
-        if (active) {
-          setEntries(result);
-          setError('');
-        }
-      })
+    searchDictionary(language)
+      .then((result) => { if (active) setEntries(result); })
       .catch((requestError: unknown) => {
-        if (active) setError(requestError instanceof Error ? requestError.message : t('Không thể tải từ điển.'));
+        if (active) setError(requestError instanceof Error ? requestError.message : 'Không thể tải từ điển.');
       })
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
-  }, [language, query, t]);
+  }, [language]);
+
+  const visibleEntries = useMemo(() => {
+    const needle = query.trim().toLocaleLowerCase();
+    return entries.filter((entry) => (
+      (!needle || entry.sourceTerm.toLocaleLowerCase().includes(needle) || entry.meaning.toLocaleLowerCase().includes(needle))
+      && (status === 'all'
+        || (status === 'pinned' && pinned.has(entry.id))
+        || (status === 'todo' && !learned.has(entry.id))
+        || (status === 'done' && learned.has(entry.id)))
+    ));
+  }, [entries, query, status, pinned, learned]);
+
+  const refreshEntries = async () => setEntries(await searchDictionary(language));
 
   const saveEntry = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!user) {
-      setError(t('Đăng nhập để bổ sung từ điển.'));
+      setError('Đăng nhập để bổ sung từ điển.');
       return;
     }
     setBusy(true);
@@ -57,10 +87,10 @@ export function VocabularyPage({ user }: { user: User | null }) {
       setMeaning('');
       setPartOfSpeech('');
       setExample('');
-      setNotice(t('Đã thêm mục từ.'));
-      setEntries(await searchDictionary(language, query));
+      setNotice('Đã thêm mục từ.');
+      await refreshEntries();
     } catch (requestError) {
-      setError(requestError instanceof Error ? requestError.message : t('Không thể lưu mục từ.'));
+      setError(requestError instanceof Error ? requestError.message : 'Không thể lưu mục từ.');
     } finally {
       setBusy(false);
     }
@@ -71,11 +101,11 @@ export function VocabularyPage({ user }: { user: User | null }) {
     event.target.value = '';
     if (!file) return;
     if (!user) {
-      setError(t('Đăng nhập để bổ sung từ điển.'));
+      setError('Đăng nhập để bổ sung từ điển.');
       return;
     }
     if (file.size > 1024 * 1024) {
-      setError(t('Tệp CSV không được vượt quá 1 MB.'));
+      setError('Tệp CSV không được vượt quá 1 MB.');
       return;
     }
 
@@ -86,117 +116,157 @@ export function VocabularyPage({ user }: { user: User | null }) {
       const csvEntries = parseDictionaryCsv(await file.text());
       const importedCount = await importDictionary(csvEntries);
       setNotice(`${t('Đã nhập thành công')} ${importedCount} ${t('mục từ')}.`);
-      setEntries(await searchDictionary(language, query));
+      await refreshEntries();
     } catch (requestError) {
-      setError(requestError instanceof Error ? requestError.message : t('Không thể nhập từ điển.'));
+      setError(requestError instanceof Error ? requestError.message : 'Không thể nhập từ điển.');
     } finally {
       setImportBusy(false);
     }
   };
 
   const speakWord = (word: string) => {
-    if (!('speechSynthesis' in window)) {
-      setError(t('Trình duyệt chưa hỗ trợ đọc thành tiếng.'));
-      return;
-    }
-    window.speechSynthesis.cancel();
-    const utterance = new SpeechSynthesisUtterance(word);
-    utterance.lang = 'vi-VN';
-    window.speechSynthesis.speak(utterance);
+    if (!speakText(word)) setError('Trình duyệt chưa hỗ trợ đọc thành tiếng.');
   };
 
+  const openModes = () => {
+    const next = buildDeck(entries, pinned, learned);
+    setDeck(next.deck);
+    setUsePinnedDeck(next.usePinned);
+    setView('modes');
+  };
+
+  const startMode = (mode: ReviewMode) => {
+    setDeck(buildDeck(entries, pinned, learned).deck);
+    setView(mode);
+  };
+
+  const backToList = () => setView('list');
+  const backToModes = () => {
+    const next = buildDeck(entries, pinned, learned);
+    setDeck(next.deck);
+    setUsePinnedDeck(next.usePinned);
+    setView('modes');
+  };
+
+  if (view === 'modes') {
+    return <div className="vb-page"><ReviewModes wordCount={deck.length} usePinned={usePinnedDeck} onPick={startMode} onBack={backToList} /></div>;
+  }
+  if (view === 'flashcard') {
+    return <div className="vb-page"><FlashcardMode initialDeck={deck} onSetLearned={setLearned} onModes={backToModes} onBack={backToList} /></div>;
+  }
+  if (view === 'quiz') {
+    return <div className="vb-page"><QuizMode initialDeck={deck} pool={entries} onModes={backToModes} onBack={backToList} /></div>;
+  }
+  if (view === 'listen') {
+    return <div className="vb-page"><ListenMode initialDeck={deck} pool={entries} onModes={backToModes} onBack={backToList} /></div>;
+  }
+
   return (
-    <DataPageShell
-      eyebrow="Từ điển tiếng Tày/Mường"
-      title="Từ vựng của tôi"
-      description="Dữ liệu hiện tại là giả lập cho bản demo, không phải từ điển Tày/Mường đã được kiểm chứng."
-    >
-      <div className="dictionary-toolbar">
-        <label>
-          <span>{t('Phương ngữ')}</span>
-          <select value={language} onChange={(event) => setLanguage(event.target.value as SourceLanguage)}>
-            <option value="tay">{t('Tày')}</option>
-            <option value="muong">{t('Mường')}</option>
-          </select>
-        </label>
-        <label className="search-field dictionary-search">
-          <Search size={19} />
+    <div className="vb-page">
+      <header className="vb-head">
+        <div>
+          <h1>{t('Sổ từ vựng')}</h1>
+          <p>{t('Lưu lại những từ quan trọng để học và dùng lại dễ dàng hơn.')}</p>
+        </div>
+        <button type="button" className="vb-review" onClick={openModes} disabled={loading || !entries.length}>
+          <Layers size={20} /> {t('Ôn tập')}
+        </button>
+      </header>
+
+      <div className="vb-toolbar">
+        <label className="vb-search">
+          <Search size={18} />
           <span className="sr-only">{t('Tìm từ vựng')}</span>
-          <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t('Tìm từ, nghĩa hoặc cụm từ...')} />
+          <input value={query} onChange={(event) => setQuery(event.target.value)} placeholder={t('Tìm từ trong sổ...')} />
         </label>
-        <span className="data-count-inline">{entries.length} {t('mục từ')}</span>
+        <div className="vb-filters" role="group" aria-label={t('Lọc theo trạng thái')}>
+          {statusFilters.map(({ id, label }) => (
+            <button key={id} type="button" className={status === id ? 'vb-filter-on' : ''} aria-pressed={status === id} onClick={() => setStatus(id)}>{t(label)}</button>
+          ))}
+        </div>
+        <select className="vb-language" value={language} onChange={(event) => setLanguage(event.target.value as SourceLanguage)} aria-label={t('Phương ngữ')}>
+          <option value="tay">{t('Tày')} → {t('Quốc ngữ')}</option>
+          <option value="muong">{t('Mường')} → {t('Quốc ngữ')}</option>
+        </select>
       </div>
 
       {error && <div className="notice" role="alert">{t(error)}</div>}
       {notice && <div className="form-success" role="status">{notice}</div>}
 
-      {loading && <div className="data-empty"><p>{t('Đang tải từ điển...')}</p></div>}
-      {!loading && !error && !entries.length && (
-        <div className="dictionary-empty">
-          <BookOpen size={26} />
-          <p>{t(query ? 'Không tìm thấy mục từ phù hợp.' : 'Từ điển này hiện chưa có nội dung.')}</p>
-          <p>{t('Dùng từ demo1 hoặc demo2 để xem dữ liệu mẫu, hoặc thêm mục từ trong phiên này.')}</p>
+      {loading && <div className="vb-empty"><p>{t('Đang tải từ điển...')}</p></div>}
+      {!loading && !error && !visibleEntries.length && (
+        <div className="vb-empty">
+          <BookOpen size={28} />
+          <p>{t(query || status !== 'all' ? 'Không tìm thấy từ phù hợp.' : 'Từ điển này hiện chưa có nội dung.')}</p>
         </div>
       )}
-      {!loading && !!entries.length && (
-        <div className="vocabulary-list">
-          {entries.map((entry) => (
-            <article className="dictionary-entry" key={entry.id}>
-              <div className="dictionary-entry-main">
-                <strong>{entry.sourceTerm}</strong>
-                {entry.partOfSpeech && <span>{t(entry.partOfSpeech)}</span>}
-              </div>
-              <div className="dictionary-entry-meaning">
-                <p>{entry.meaning}</p>
-                {entry.example && <small>{entry.example}</small>}
-              </div>
-              <button className="quiet-button" onClick={() => speakWord(entry.meaning)} aria-label={`${t('Nghe nghĩa')}: ${entry.meaning}`}>
-                <Volume2 size={19} />
-              </button>
-            </article>
-          ))}
-        </div>
+      {!loading && visibleEntries.length > 0 && (
+        <ul className="vb-list">
+          {visibleEntries.map((entry) => {
+            const isPinned = pinned.has(entry.id);
+            const isLearned = learned.has(entry.id);
+            return (
+              <li className="vb-row" key={entry.id}>
+                <strong className="vb-word">{entry.sourceTerm}</strong>
+                <span className="vb-meaning">{entry.meaning}</span>
+                <div className="vb-actions">
+                  <label className={`vb-check ${isLearned ? 'vb-check-on' : ''}`}>
+                    <input type="checkbox" checked={isLearned} onChange={(event) => setLearned(entry.id, event.target.checked)} />
+                    <span>{t('Đã thuộc')}</span>
+                  </label>
+                  <button type="button" className="vb-listen" onClick={() => speakWord(entry.sourceTerm)} aria-label={`${t('Nghe')}: ${entry.sourceTerm}`}>
+                    <Volume2 size={17} /> {t('Nghe')}
+                  </button>
+                  <button type="button" className={`vb-pin ${isPinned ? 'vb-pin-on' : ''}`} onClick={() => setPinned(entry.id)} aria-pressed={isPinned}>
+                    <Pin size={16} /> {t(isPinned ? 'Đã ghim' : 'Ghim')}
+                  </button>
+                </div>
+              </li>
+            );
+          })}
+        </ul>
       )}
 
-      <section className="dictionary-manage">
-        <div className="dictionary-manage-heading">
-          <div>
-            <div className="eyebrow"><span className="eyebrow-line" /> {t('Dữ liệu trình diễn')}</div>
-            <h2>{t('Bổ sung từ điển')}</h2>
-            <p>{t('Mục từ thêm hoặc nhập chỉ lưu trong bộ nhớ của phiên demo này.')}</p>
+      <details className="vb-contribute">
+        <summary>{t('Bổ sung từ điển')}</summary>
+        <section className="dictionary-manage">
+          <div className="dictionary-manage-heading">
+            <div>
+              <p>{t('Mục từ thêm hoặc nhập chỉ lưu trong bộ nhớ của phiên demo này.')}</p>
+            </div>
+            <a className="secondary-button" href="/dictionary-template.csv" download>
+              <Download size={18} /> {t('Tải tệp mẫu')}
+            </a>
           </div>
-          <a className="secondary-button" href="/dictionary-template.csv" download>
-            <Download size={18} /> {t('Tải tệp mẫu')}
-          </a>
-        </div>
-        <label className="csv-import-button">
-          <FileUp size={19} />
-          {t(importBusy ? 'Đang nhập...' : 'Tải file từ điển CSV')}
-          <input type="file" accept=".csv,text/csv" onChange={(event) => void importFile(event)} disabled={importBusy || !user} />
-        </label>
-        {!user && <p className="dictionary-signin-note">{t('Có thể tra từ khi chưa đăng nhập; cần đăng nhập để bổ sung dữ liệu.')}</p>}
-        <form className="dictionary-entry-form" onSubmit={(event) => void saveEntry(event)}>
-          <label>
-            {t('Từ địa phương')}
-            <input value={sourceTerm} onChange={(event) => setSourceTerm(event.target.value)} maxLength={120} required />
+          <label className="csv-import-button">
+            <FileUp size={19} />
+            {t(importBusy ? 'Đang nhập...' : 'Tải file từ điển CSV')}
+            <input type="file" accept=".csv,text/csv" onChange={(event) => void importFile(event)} disabled={importBusy || !user} />
           </label>
-          <label>
-            {t('Nghĩa tiếng Việt')}
-            <input value={meaning} onChange={(event) => setMeaning(event.target.value)} maxLength={500} required />
-          </label>
-          <label>
-            {t('Loại từ')}
-            <input value={partOfSpeech} onChange={(event) => setPartOfSpeech(event.target.value)} maxLength={80} />
-          </label>
-          <label>
-            {t('Ví dụ trong câu')}
-            <input value={example} onChange={(event) => setExample(event.target.value)} maxLength={500} />
-          </label>
-          <button className="primary-button" type="submit" disabled={!user || busy}>
-            <Lightbulb size={18} /> {t(busy ? 'Đang lưu...' : 'Thêm mục từ')}
-          </button>
-        </form>
-      </section>
-    </DataPageShell>
+          {!user && <p className="dictionary-signin-note">{t('Có thể tra từ khi chưa đăng nhập; cần đăng nhập để bổ sung dữ liệu.')}</p>}
+          <form className="dictionary-entry-form" onSubmit={(event) => void saveEntry(event)}>
+            <label>
+              {t('Từ địa phương')}
+              <input value={sourceTerm} onChange={(event) => setSourceTerm(event.target.value)} maxLength={120} required />
+            </label>
+            <label>
+              {t('Nghĩa tiếng Việt')}
+              <input value={meaning} onChange={(event) => setMeaning(event.target.value)} maxLength={500} required />
+            </label>
+            <label>
+              {t('Loại từ')}
+              <input value={partOfSpeech} onChange={(event) => setPartOfSpeech(event.target.value)} maxLength={80} />
+            </label>
+            <label>
+              {t('Ví dụ trong câu')}
+              <input value={example} onChange={(event) => setExample(event.target.value)} maxLength={500} />
+            </label>
+            <button className="primary-button" type="submit" disabled={!user || busy}>
+              <Lightbulb size={18} /> {t(busy ? 'Đang lưu...' : 'Thêm mục từ')}
+            </button>
+          </form>
+        </section>
+      </details>
+    </div>
   );
 }

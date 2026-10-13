@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
 import { Header, LeafMark, Sidebar } from '@/components/AppLayout';
 import { getCurrentUser, logoutAccount } from '@/backend/api';
-import { navItems } from '@/config/navigation';
 import { AuthPage } from '@/pages/AuthPage';
 import { AIAssistantPage } from '@/pages/AIAssistantPage';
+import { ContactPage } from '@/pages/ContactPage';
 import { HistoryPage } from '@/pages/HistoryPage';
 import { HomePage } from '@/pages/HomePage';
 import { NotFoundPage } from '@/pages/NotFoundPage';
@@ -22,6 +22,7 @@ const routePaths: Record<Route, string> = {
   translate: '/translate',
   'ai-assistant': '/ai-assistant',
   vocabulary: '/vocabulary',
+  contact: '/contact',
   practice: '/practice',
   history: '/history',
   news: '/news',
@@ -34,6 +35,13 @@ const routePaths: Record<Route, string> = {
 
 function routeFromPath(pathname: string): Route {
   return (Object.keys(routePaths) as Route[]).find((route) => routePaths[route] === pathname) ?? 'not-found';
+}
+
+const activePageByRoute: Partial<Record<Route, Page>> = { practice: 'vocabulary', history: 'profile' };
+const pageIds: Page[] = ['home', 'translate', 'vocabulary', 'ai-assistant', 'contact', 'profile', 'settings'];
+
+function activePageForRoute(route: Route): Page | undefined {
+  return activePageByRoute[route] ?? pageIds.find((id) => id === route);
 }
 
 function App() {
@@ -62,7 +70,7 @@ function App() {
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
-  const activePage = navItems.some(({ id }) => id === route) ? (route as Page) : undefined;
+  const activePage = activePageForRoute(route);
   const handleSignOut = async () => {
     await logoutAccount();
     setUser(null);
@@ -83,6 +91,10 @@ function App() {
     );
   }
 
+  if (route === 'login' || route === 'signup') {
+    return <AuthPage mode={route} onNavigate={navigate} onAuthenticated={handleAuthenticated} />;
+  }
+
   return (
     <div className="app-shell">
       <Sidebar
@@ -91,26 +103,21 @@ function App() {
         onNavigate={navigate}
         onToggle={() => setIsSidebarCollapsed((current) => !current)}
       />
-      <div className={`content-shell ${route === 'home' ? 'content-shell-home' : ''}`}>
+      <div className={`content-shell ${route === 'home' ? 'content-shell-home' : ''} ${route === 'translate' || route === 'vocabulary' || route === 'contact' || route === 'profile' || route === 'settings' ? 'content-shell-warm' : ''} ${route === 'ai-assistant' ? 'content-shell-ai' : ''}`}>
         <Header user={user} onNavigate={navigate} />
         <main className="page-content">
           {route === 'home' && <HomePage onNavigate={navigate} user={user} />}
           {route === 'translate' && <TranslatePage onNavigate={navigate} user={user} />}
           {route === 'ai-assistant' && <AIAssistantPage />}
           {route === 'vocabulary' && <VocabularyPage user={user} />}
+          {route === 'contact' && <ContactPage />}
           {route === 'practice' && <PracticePage onNavigate={navigate} />}
           {route === 'history' && <HistoryPage onNavigate={navigate} user={user} />}
           {route === 'news' && <NewsPage />}
           {route === 'profile' && (
             <ProfilePage user={user} onNavigate={navigate} onSignOut={handleSignOut} />
           )}
-          {route === 'settings' && <SettingsPage onNavigate={navigate} />}
-          {route === 'login' && (
-            <AuthPage mode="login" onNavigate={navigate} onAuthenticated={handleAuthenticated} />
-          )}
-          {route === 'signup' && (
-            <AuthPage mode="signup" onNavigate={navigate} onAuthenticated={handleAuthenticated} />
-          )}
+          {route === 'settings' && <SettingsPage user={user} onNavigate={navigate} onSignOut={handleSignOut} />}
           {route === 'not-found' && <NotFoundPage onNavigate={navigate} />}
         </main>
       </div>

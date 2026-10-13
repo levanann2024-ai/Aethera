@@ -1,3 +1,3 @@
-export type Page = 'home' | 'translate' | 'ai-assistant' | 'vocabulary' | 'practice' | 'history' | 'news';
+export type Page = 'home' | 'translate' | 'vocabulary' | 'ai-assistant' | 'contact' | 'profile' | 'settings';
 
-export type Route = Page | 'profile' | 'settings' | 'login' | 'signup' | 'not-found';
+export type Route = Page | 'practice' | 'history' | 'news' | 'login' | 'signup' | 'not-found';

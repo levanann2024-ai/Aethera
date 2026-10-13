@@ -1,4 +1,4 @@
-import { BookOpen, History, House, Languages, Newspaper, Sparkles, WandSparkles } from 'lucide-react';
+import { BookMarked, Bot, House, Languages, Mail, Settings } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import type { Page } from '@/types/navigation';
 
@@ -6,10 +6,10 @@ type NavItem = { id: Page; label: string; icon: LucideIcon };
 
 export const navItems: NavItem[] = [
   { id: 'home', label: 'Trang chủ', icon: House },
-  { id: 'translate', label: 'Tra từ điển', icon: Languages },
-  { id: 'ai-assistant', label: 'Trợ lý AI', icon: WandSparkles },
-  { id: 'vocabulary', label: 'Từ vựng', icon: BookOpen },
-  { id: 'practice', label: 'Luyện tập', icon: Sparkles },
-  { id: 'history', label: 'Lịch sử tra từ', icon: History },
-  { id: 'news', label: 'Tin tức', icon: Newspaper },
+  { id: 'translate', label: 'Dịch & Tra từ', icon: Languages },
+  { id: 'vocabulary', label: 'Sổ từ vựng & Luyện tập', icon: BookMarked },
+  { id: 'ai-assistant', label: 'Trợ lý AI', icon: Bot },
+  { id: 'contact', label: 'Liên hệ & Góp ý', icon: Mail },
 ];
+
+export const settingsNavItem: NavItem = { id: 'settings', label: 'Cài đặt', icon: Settings };
