@@ -694,6 +694,8 @@ const translations: Record<string, string> = {
   'Về trang chủ': 'Go to home',
   'Mở rộng menu': 'Expand menu',
   'Thu gọn menu': 'Collapse menu',
+  'Điều hướng trước': 'Scroll navigation left',
+  'Điều hướng sau': 'Scroll navigation right',
   'Tày': 'Tày',
   'Mường': 'Mường',
   'Phương ngữ': 'Dialect',

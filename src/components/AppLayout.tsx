@@ -1,5 +1,6 @@
+import { useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
-import { ChevronDown, LogIn, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
+import { ChevronDown, ChevronLeft, ChevronRight, LogIn, PanelLeftClose, PanelLeftOpen } from 'lucide-react';
 import { navItems, settingsNavItem } from '@/config/navigation';
 import type { User } from '@/types/auth';
 import type { Page, Route } from '@/types/navigation';
@@ -7,6 +8,42 @@ import { useLanguage } from '@/i18n/useLanguage';
 
 export function Sidebar({ activePage, collapsed, onNavigate, onToggle }: { activePage: Page | undefined; collapsed: boolean; onNavigate: (route: Route) => void; onToggle: () => void }) {
   const { t } = useLanguage();
+  const navRef = useRef<HTMLElement>(null);
+  const [canScrollLeft, setCanScrollLeft] = useState(false);
+  const [canScrollRight, setCanScrollRight] = useState(false);
+  const updateScrollButtons = () => {
+    const nav = navRef.current;
+    if (!nav) return;
+    setCanScrollLeft(nav.scrollLeft > 0);
+    setCanScrollRight(nav.scrollLeft + nav.clientWidth < nav.scrollWidth - 1);
+  };
+
+  useEffect(() => {
+    const nav = navRef.current;
+    if (!nav) return;
+    updateScrollButtons();
+    nav.addEventListener('scroll', updateScrollButtons);
+    window.addEventListener('resize', updateScrollButtons);
+    return () => {
+      nav.removeEventListener('scroll', updateScrollButtons);
+      window.removeEventListener('resize', updateScrollButtons);
+    };
+  }, []);
+
+  useEffect(() => {
+    const nav = navRef.current;
+    const activeItem = nav?.querySelector<HTMLElement>('[aria-current="page"]');
+    if (!nav || !activeItem) return;
+    const navBounds = nav.getBoundingClientRect();
+    const itemBounds = activeItem.getBoundingClientRect();
+    if (itemBounds.left < navBounds.left) nav.scrollBy({ left: itemBounds.left - navBounds.left, behavior: 'smooth' });
+    else if (itemBounds.right > navBounds.right) nav.scrollBy({ left: itemBounds.right - navBounds.right, behavior: 'smooth' });
+  }, [activePage]);
+
+  const scrollNav = (direction: -1 | 1) => {
+    navRef.current?.scrollBy({ left: direction * 176, behavior: 'smooth' });
+  };
+
   const renderItem = ({ id, label, icon: Icon }: (typeof navItems)[number]) => {
     const active = activePage === id;
     return (
@@ -26,7 +63,9 @@ export function Sidebar({ activePage, collapsed, onNavigate, onToggle }: { activ
   };
   return <aside className={`sidebar ${collapsed ? 'sidebar-collapsed' : ''}`}>
     <div className="sidebar-top"><button className="brand" onClick={() => onNavigate('home')} aria-label={t('Về trang chủ')}><span className="brand-mark"><LeafMark /></span>{!collapsed && <span className="brand-copy"><strong>Aethera</strong></span>}</button><button className="collapse-button" onClick={onToggle} aria-label={t(collapsed ? 'Mở rộng menu' : 'Thu gọn menu')}>{collapsed ? <PanelLeftOpen size={17} /> : <PanelLeftClose size={17} />}</button></div>
-    <nav className="main-nav" aria-label={t('Điều hướng chính')}>{navItems.map(renderItem)}</nav>
+    <button className="mobile-nav-arrow" type="button" onClick={() => scrollNav(-1)} disabled={!canScrollLeft} aria-label={t('Điều hướng trước')}><ChevronLeft size={19} /></button>
+    <nav ref={navRef} className="main-nav" aria-label={t('Điều hướng chính')}>{navItems.map(renderItem)}</nav>
+    <button className="mobile-nav-arrow" type="button" onClick={() => scrollNav(1)} disabled={!canScrollRight} aria-label={t('Điều hướng sau')}><ChevronRight size={19} /></button>
     <div className="sidebar-bottom">{renderItem(settingsNavItem)}</div>
   </aside>;
 }
