@@ -1,0 +1,76 @@
+.gt-page { display: grid; gap: 18px; max-width: 1100px; margin: 0 auto; }
+.gt-modes { display: flex; flex-wrap: wrap; gap: 10px; }
+.gt-mode { display: inline-flex; align-items: center; gap: 8px; height: 44px; padding: 0 18px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); color: var(--brand-dark); font: inherit; font-weight: 600; cursor: pointer; transition: background .15s, box-shadow .15s; }
+.gt-mode:hover { background: var(--mint); }
+.gt-mode-active { background: var(--brand-soft); border-color: transparent; box-shadow: inset 0 0 0 1px rgba(20, 121, 101, .25); }
+
+.gt-langbar { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; gap: 8px; }
+.gt-tabs { display: flex; align-items: center; gap: 4px; }
+.gt-tab { position: relative; height: 44px; padding: 0 14px; border: 0; background: none; color: var(--muted); font: inherit; font-weight: 600; cursor: pointer; }
+.gt-tab-active { color: var(--brand); }
+.gt-tab-active::after { content: ''; position: absolute; left: 6px; right: 6px; bottom: 0; height: 3px; border-radius: 3px 3px 0 0; background: var(--brand); }
+.gt-swap { display: grid; place-items: center; width: 44px; height: 44px; border: 0; border-radius: 50%; background: none; color: var(--muted); cursor: pointer; }
+.gt-swap:hover { background: var(--mint); color: var(--brand); }
+
+.gt-split { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.gt-card { position: relative; display: flex; flex-direction: column; min-height: 250px; padding: 18px 20px 12px; border: 1px solid var(--line); border-radius: 18px; background: var(--surface); }
+.gt-card:focus-within { border-color: var(--brand); box-shadow: 0 0 0 3px rgba(20, 121, 101, .12); }
+.gt-card-result { background: var(--mint); border-color: transparent; }
+.gt-card textarea { flex: 1; width: 100%; min-height: 130px; border: 0; outline: 0; resize: none; background: transparent; color: var(--ink); font: inherit; font-size: 26px; line-height: 1.4; }
+.gt-card textarea::placeholder { color: var(--soft-muted); }
+.gt-clear { position: absolute; top: 14px; right: 14px; }
+.gt-toolbar { display: flex; align-items: center; gap: 4px; margin-top: 8px; }
+.gt-toolbar-spacer { flex: 1; }
+.gt-count { color: var(--muted); font-size: 14px; margin-right: 8px; }
+.gt-icon { display: grid; place-items: center; width: 40px; height: 40px; border: 0; border-radius: 50%; background: none; color: var(--muted); cursor: pointer; }
+.gt-icon:hover:not(:disabled) { background: rgba(20, 121, 101, .1); color: var(--brand); }
+.gt-icon:disabled { opacity: .4; cursor: default; }
+
+.gt-result-body { flex: 1; min-height: 130px; }
+.gt-result-main { margin: 0; color: var(--ink); font-size: 26px; line-height: 1.4; }
+.gt-parts { display: flex; flex-wrap: wrap; gap: 8px; margin: 14px 0 0; padding: 0; list-style: none; }
+.gt-parts li { display: grid; padding: 6px 12px; border-radius: 12px; background: var(--surface); font-size: 14px; }
+.gt-parts li strong { color: var(--brand-dark); }
+.gt-parts li span { color: var(--muted); }
+.gt-parts .gt-missing { opacity: .6; }
+.gt-empty { display: flex; align-items: center; gap: 10px; color: var(--soft-muted); }
+
+.gt-chips { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin-top: 6px; }
+.gt-chips-label { color: var(--muted); font-size: 14px; }
+.gt-chip { padding: 4px 12px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface); color: var(--brand-dark); font: inherit; font-size: 14px; cursor: pointer; }
+.gt-chip:hover { background: var(--brand-soft); }
+
+.gt-drop { display: grid; grid-template-columns: 1fr 1fr; min-height: 340px; border: 1px solid var(--line); border-radius: 18px; background: var(--surface); }
+.gt-drop-over { border-color: var(--brand); background: var(--mint); }
+.gt-drop-left { display: grid; place-items: center; align-content: center; gap: 12px; padding: 24px; border-right: 1px solid var(--line); }
+.gt-cloud { display: grid; place-items: center; width: 240px; height: 150px; border-radius: 80px 90px 60px 60px; background: #d6ece4; color: var(--brand); }
+.gt-drop-title { font-size: 26px; color: var(--ink); }
+.gt-drop-right { display: grid; align-content: center; justify-items: center; gap: 10px; padding: 24px; }
+.gt-drop-right h3 { margin: 0 0 6px; font-weight: 600; color: var(--ink); }
+.gt-btn { width: 260px; height: 42px; border-radius: 8px; border: 1px solid var(--line); background: var(--surface); color: var(--brand); font: inherit; font-weight: 600; cursor: pointer; }
+.gt-btn-primary { background: var(--brand); border-color: var(--brand); color: #fff; }
+.gt-btn-primary:hover { background: var(--brand-dark); }
+.gt-hint { max-width: 320px; margin-top: 18px; color: var(--muted); font-size: 13px; text-align: center; }
+.gt-preview { max-width: 100%; max-height: 220px; border-radius: 12px; object-fit: contain; }
+.gt-file { display: flex; align-items: center; gap: 8px; color: var(--ink); font-weight: 600; word-break: break-all; }
+
+.gt-web { display: grid; place-items: center; min-height: 200px; padding: 28px; border: 1px solid var(--line); border-radius: 18px; background: var(--surface); }
+.gt-web-row { display: flex; align-items: center; gap: 12px; width: min(760px, 100%); }
+.gt-field { position: relative; flex: 1; }
+.gt-field label { position: absolute; top: -9px; left: 12px; padding: 0 4px; background: var(--surface); color: var(--brand); font-size: 12px; }
+.gt-field input { width: 100%; height: 56px; padding: 0 16px; border: 1px solid var(--brand); border-radius: 6px; outline: 0; background: transparent; color: var(--ink); font: inherit; }
+.gt-go { display: grid; place-items: center; width: 56px; height: 56px; border: 0; border-radius: 50%; background: var(--brand); color: #fff; cursor: pointer; }
+.gt-go:disabled { opacity: .5; cursor: default; }
+
+.gt-shortcuts { display: flex; justify-content: center; gap: 36px; margin-top: 18px; }
+.gt-shortcut { display: grid; justify-items: center; gap: 8px; border: 0; background: none; color: var(--muted); font: inherit; cursor: pointer; }
+.gt-shortcut span:first-child { display: grid; place-items: center; width: 64px; height: 64px; border: 1px solid var(--line); border-radius: 50%; background: var(--surface); }
+.gt-shortcut:hover span:first-child { background: var(--mint); color: var(--brand); }
+
+@media (max-width: 760px) {
+  .gt-split, .gt-drop { grid-template-columns: 1fr; }
+  .gt-drop-left { border-right: 0; border-bottom: 1px solid var(--line); }
+  .gt-langbar { grid-template-columns: 1fr auto; }
+  .gt-langbar .gt-tabs:last-child { grid-column: 1 / -1; }
+  .gt-cloud { width: 180px; height: 110px; }
+}
