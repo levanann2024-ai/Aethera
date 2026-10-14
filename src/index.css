@@ -712,3 +712,4 @@ html[data-reduce-motion='on'] *, html[data-reduce-motion='on'] *::before, html[d
 .page-content {
   flex: 1; /* Chiếm toàn bộ khoảng trống còn lại để ép Footer xuống tận đáy */
 }
+.page-content.page-content-map { width: 100%; max-width: none; padding: 0; }

@@ -66,11 +66,66 @@
 .gt-shortcut { display: grid; justify-items: center; gap: 8px; border: 0; background: none; color: var(--muted); font: inherit; cursor: pointer; }
 .gt-shortcut span:first-child { display: grid; place-items: center; width: 64px; height: 64px; border: 1px solid var(--line); border-radius: 50%; background: var(--surface); }
 .gt-shortcut:hover span:first-child { background: var(--mint); color: var(--brand); }
+.gt-page {
+  max-width: 1280px !important;
+  width: 100% !important;
+  margin: 0 auto !important;
+  min-width: 0;
+  box-sizing: border-box !important;
+}
 
+/* Ép 2 ô nhập văn bản và kết quả dãn rộng tối đa */
+.gt-split {
+  display: grid !important;
+  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  gap: 24px !important;
+  width: 100% !important;
+  max-width: none !important;
+}
+
+/* Đảm bảo các khung card bên trong căng full diện tích cột */
+.gt-card {
+  width: 100% !important;
+  box-sizing: border-box !important;
+}
+.gt-langbar {
+  position: relative;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 24px;
+}
+.gt-swap {
+  position: absolute;
+  left: 50%;
+  transform: translateX(-50%);
+}
+.gt-split-text {
+  grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+  width: 100% !important;
+}
+.gt-split-text > .gt-card {
+  min-height: 230px !important;
+}
+.content-shell.content-shell-translate {
+  background: #fff;
+}
+.content-shell.content-shell-translate .topbar.topbar {
+  background: #fff;
+}
+.content-shell-translate .page-content {
+  max-width: none;
+  width: 100%;
+  margin: 0;
+  padding: 32px clamp(24px, 3vw, 48px) 48px;
+}
 @media (max-width: 760px) {
+  .gt-page {
+    width: 100% !important;
+    margin: 0 auto !important;
+  }
   .gt-split, .gt-drop { grid-template-columns: 1fr; }
   .gt-drop-left { border-right: 0; border-bottom: 1px solid var(--line); }
-  .gt-langbar { grid-template-columns: 1fr auto; }
+  .gt-langbar { position: static; grid-template-columns: 1fr auto; }
+  .gt-swap { position: static; transform: none; }
   .gt-langbar .gt-tabs:last-child { grid-column: 1 / -1; }
   .gt-cloud { width: 180px; height: 110px; }
 }

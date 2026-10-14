@@ -189,7 +189,6 @@ export function ChatMode({ initialText = '', onBack }: { initialText?: string; o
           )}
           <button type="submit" className="aic-send" disabled={!draft.trim() || busy}>{t('Gửi')} <ArrowUpRight size={16} /></button>
         </form>
-        <p className="aic-note">{t('Trợ lý hiện dựa trên từ điển mẫu của ứng dụng, chưa phải AI thật. Hãy đối chiếu với người nói bản ngữ.')}</p>
       </section>
     </div>
   );

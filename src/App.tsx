@@ -7,6 +7,7 @@ import { AIAssistantPage } from '@/pages/AIAssistantPage';
 import { ContactPage } from '@/pages/ContactPage';
 import { HistoryPage } from '@/pages/HistoryPage';
 import { HomePage } from '@/pages/HomePage';
+import { Interactivemap } from '@/pages/Interactivemap';
 import { NotFoundPage } from '@/pages/NotFoundPage';
 import { NewsPage } from '@/pages/NewsPage';
 import { PracticePage } from '@/pages/PracticePage';
@@ -23,6 +24,7 @@ const routePaths: Record<Route, string> = {
   home: '/',
   translate: '/translate',
   'ai-assistant': '/ai-assistant',
+  'cultural-map': '/cultural-map',
   vocabulary: '/vocabulary',
   contact: '/contact',
   practice: '/practice',
@@ -40,7 +42,7 @@ function routeFromPath(pathname: string): Route {
 }
 
 const activePageByRoute: Partial<Record<Route, Page>> = { history: 'profile' };
-const pageIds: Page[] = ['home', 'translate', 'vocabulary', 'practice', 'ai-assistant', 'contact', 'profile', 'settings'];
+const pageIds: Page[] = ['home', 'translate', 'vocabulary', 'practice', 'ai-assistant', 'cultural-map', 'contact', 'profile', 'settings'];
 
 function activePageForRoute(route: Route): Page | undefined {
   return activePageByRoute[route] ?? pageIds.find((id) => id === route);
@@ -112,15 +114,16 @@ function App() {
         onNavigate={navigate}
         onToggle={() => setIsSidebarCollapsed((current) => !current)}
       />
-      <div className={`content-shell ${route === 'home' ? 'content-shell-home' : ''} ${route === 'translate' || route === 'vocabulary' || route === 'practice' || route === 'contact' || route === 'profile' || route === 'settings' ? 'content-shell-warm' : ''} ${route === 'ai-assistant' ? 'content-shell-ai' : ''} ${isTopbarHidden ? 'content-shell-topbar-hidden' : ''}`}>
+      <div className={`content-shell ${route === 'home' ? 'content-shell-home' : ''} ${route === 'translate' || route === 'vocabulary' || route === 'practice' || route === 'contact' || route === 'profile' || route === 'settings' ? 'content-shell-warm' : ''} ${route === 'translate' ? 'content-shell-translate' : ''} ${route === 'ai-assistant' ? 'content-shell-ai' : ''} ${isTopbarHidden ? 'content-shell-topbar-hidden' : ''}`}>
         <Header user={user} onNavigate={navigate} />
         <button type="button" className="topbar-toggle" onClick={toggleTopbar} aria-label={t(isTopbarHidden ? 'Hiện thanh trên cùng' : 'Ẩn thanh trên cùng')} aria-expanded={!isTopbarHidden}>
           {isTopbarHidden ? <ChevronDown size={16} /> : <ChevronUp size={16} />}
         </button>
-        <main className="page-content">
+        <main className={`page-content ${route === 'cultural-map' ? 'page-content-map' : ''}`}>
           {route === 'home' && <HomePage onNavigate={navigate} user={user} />}
           {route === 'translate' && <TranslatePage onNavigate={navigate} user={user} />}
           {route === 'ai-assistant' && <AIAssistantPage />}
+          {route === 'cultural-map' && <Interactivemap />}
           {route === 'vocabulary' && <VocabularyPage user={user} />}
           {route === 'contact' && <ContactPage />}
           {route === 'practice' && <PracticePage onNavigate={navigate} />}

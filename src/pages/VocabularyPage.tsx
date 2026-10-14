@@ -140,8 +140,8 @@ export function VocabularyPage({ user }: { user: User | null }) {
           ))}
         </div>
         <select className="vb-language" value={language} onChange={(event) => setLanguage(event.target.value as SourceLanguage)} aria-label={t('Phương ngữ')}>
-          <option value="tay">{t('Tày')} → {t('Tiếng phổ thông')}</option>
-          <option value="muong">{t('Mường')} → {t('Tiếng phổ thông')}</option>
+          <option value="tay">{t('Tiếng phổ thông')} → {t('Tày')}</option>
+          <option value="muong">{t('Tiếng phổ thông')} → {t('Mường')}</option>
         </select>
       </div>
 

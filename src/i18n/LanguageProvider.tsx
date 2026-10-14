@@ -230,7 +230,6 @@ const translations: Record<string, string> = {
   'BẠN': 'YOU',
   'Nhập câu hỏi của bạn...': 'Type your question...',
   'Gửi': 'Send',
-  'Trợ lý hiện dựa trên từ điển mẫu của ứng dụng, chưa phải AI thật. Hãy đối chiếu với người nói bản ngữ.': 'The assistant currently uses the app sample dictionary and is not a real AI. Please check with native speakers.',
   'Sổ từ vựng': 'Vocabulary notebook',
   'Lưu lại những từ quan trọng để học và dùng lại dễ dàng hơn.': 'Save important words so they are easier to learn and reuse.',
   'Ôn tập': 'Review',

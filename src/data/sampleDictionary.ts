@@ -1,10 +1,10 @@
 import type { DictionaryEntry, SourceLanguage } from '@/types/dictionary';
 
 export const suggestedVocabulary = [
-  { word: 'Khắc Hoài', meaning: 'Nhớ mãi, luôn ghi nhớ.' },
-  { word: 'Slao', meaning: 'Cô gái, người con gái.' },
-  { word: "P'mồng", meaning: 'Thời điểm hoặc dịp trong năm.' },
-  { word: 'Nỏ', meaning: 'Không, chẳng.' },
+  { word: 'Nhớ mãi, luôn ghi nhớ', meaning: 'Tiếng dân tộc: Khắc Hoài' },
+  { word: 'Cô gái, người con gái', meaning: 'Tiếng dân tộc: Slao' },
+  { word: 'Thời điểm hoặc dịp trong năm', meaning: "Tiếng dân tộc: P'mồng" },
+  { word: 'Không, chẳng', meaning: 'Tiếng dân tộc: Nỏ' },
 ] as const;
 
 export const sampleDictionaryEntries: DictionaryEntry[] = (['tay', 'muong'] as const).flatMap(

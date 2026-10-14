@@ -9,6 +9,7 @@ import { ExplainTool } from './ai/ExplainTool';
 import { MatchGame } from './ai/MatchGame';
 import { PlanTool } from './ai/PlanTool';
 import { SpeakStage } from './ai/SpeakStage';
+import { SubtitleTool } from './ai/SubtitleTool';
 import './ai/ai.css';
 import './ai/aiTools.css';
 
@@ -53,7 +54,7 @@ export function AIAssistantPage() {
         </div>
 
         {/* Danh sách 2 Card được căn giữa và phóng to */}
-        <div className="aic-cards max-w-3xl mx-auto grid grid-cols-1 md:grid-cols-2 gap-6 justify-center">
+        <div className="aic-cards">
           {aiModes.map(({ id, title, description, tone, icon: Icon }) => (
             <button 
               key={id} 
@@ -93,7 +94,7 @@ export function AIAssistantPage() {
   }
 
   return (
-    <div className="aix-page">
+    <div className={`aix-page${active.id === 'subtitles' ? ' aix-page-wide' : ''}`}>
       <header className="aix-head">
         <button type="button" className="aic-back" onClick={() => setMode(null)}>
           <ArrowLeft size={16} /> {t('Quay lại')}
@@ -108,8 +109,8 @@ export function AIAssistantPage() {
         {active.id === 'plan' && <PlanTool />}
         {active.id === 'quiz' && <MatchGame />}
         {active.id === 'speak' && <SpeakStage />}
+        {active.id === 'subtitles' && <SubtitleTool />}
       </div>
-      <p className="aic-note">{t('Trợ lý hiện dựa trên từ điển mẫu của ứng dụng, chưa phải AI thật. Hãy đối chiếu với người nói bản ngữ.')}</p>
     </div>
   );
 }

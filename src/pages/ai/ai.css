@@ -6,8 +6,8 @@
 .aic-kicker { color: #1f7a63; font-size: 11px; font-weight: 800; letter-spacing: .08em; }
 .aic-launch h1 { margin: 8px 0 10px; color: #14503f; font-family: 'Plus Jakarta Sans', sans-serif; font-size: 38px; line-height: 1.15; letter-spacing: -.02em; }
 .aic-launch header p { margin: 0; color: #5f7a72; font-size: 15px; }
-.aic-cards { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 20px; }
-.aic-card { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; min-height: 340px; padding: 30px 26px; border: 1px solid #ebf0e4; border-radius: 26px; background: #fffef9; box-shadow: 0 8px 22px rgba(34,80,63,.08); color: inherit; font: inherit; text-align: left; cursor: pointer; transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease; }
+.aic-cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; width: min(100%, 980px); margin: 0 auto; }
+.aic-card { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; min-height: 290px; padding: 24px 20px; border: 1px solid #ebf0e4; border-radius: 26px; background: #fffef9; box-shadow: 0 8px 22px rgba(34,80,63,.08); color: inherit; font: inherit; text-align: left; cursor: pointer; transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease; }
 .aic-card:hover { transform: translateY(-4px); border-color: #cfe2d8; box-shadow: 0 16px 30px rgba(34,80,63,.12); }
 .aic-card-icon { display: grid; place-items: center; width: 92px; height: 92px; margin-bottom: auto; border-radius: 26px; transform: rotate(-6deg); }
 .aic-card-icon svg { width: 40px; height: 40px; }
@@ -27,7 +27,7 @@
 .aic-back { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 42px; padding: 0 16px; border: 1px solid #e2e0cf; border-radius: 12px; background: #fff; color: #14503f; font: inherit; font-size: 14px; font-weight: 700; cursor: pointer; }
 .aic-back:hover { border-color: #2f8f76; }
 .aic-note { margin: 8px 0 0; color: #8a978f; font-size: 11.5px; }
-@media (max-width: 1100px) { .aic-cards { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+@media (max-width: 900px) { .aic-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 760px) {
   .aic-launch h1 { font-size: 30px; }
   .aic-cards { grid-template-columns: 1fr; }

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import {
-  ArrowLeftRight, ArrowRight, BookOpen, ClipboardPaste, Copy, FileText, Globe, History, Image as ImageIcon,
-  Keyboard, Languages, Mic, Square, Star, UploadCloud, Volume2, X
+  ArrowLeftRight, BookOpen, ClipboardPaste, Copy, FileText, History, Image as ImageIcon,
+  Languages, Mic, Star, UploadCloud, Volume2, X
 } from 'lucide-react';
 import { getSettings } from '@/backend/settings';
 import { lookupPhrase, lookupVietnameseToEthnic } from '@/backend/api';
@@ -13,20 +13,14 @@ import type { Route } from '@/types/navigation';
 import { useLanguage } from '@/i18n/useLanguage';
 import './translate.css';
 
-type InputKind = 'text' | 'voice' | 'image' | 'document' | 'web';
-
-const waveformBars = Array.from({ length: 44 }, (_, index) => 6 + Math.round(Math.abs(Math.sin(index * 0.9) * Math.cos(index * 0.31)) * 22));
+type InputKind = 'text' | 'image';
 
 const MAX_LENGTH = 2000;
 const IMAGE_TYPES = '.jpg,.jpeg,.png,.webp';
-const DOC_TYPES = '.txt,.md,.csv';
 
 const kinds: { id: InputKind; label: string; icon: typeof Languages }[] = [
   { id: 'text', label: 'Văn bản', icon: Languages },
-  { id: 'voice', label: 'Giọng nói', icon: Mic },
-  { id: 'image', label: 'Hình ảnh', icon: ImageIcon },
-  { id: 'document', label: 'Tài liệu', icon: FileText },
-  { id: 'web', label: 'Trang web', icon: Globe }
+  { id: 'image', label: 'Hình ảnh', icon: ImageIcon }
 ];
 
 export function TranslatePage({ user, onNavigate }: { onNavigate?: (route: Route) => void; user: User | null }) {
@@ -40,63 +34,75 @@ export function TranslatePage({ user, onNavigate }: { onNavigate?: (route: Route
   const [fileName, setFileName] = useState('');
   const [imageUrl, setImageUrl] = useState('');
   const [dragOver, setDragOver] = useState(false);
-  const [webUrl, setWebUrl] = useState('');
-  const [webLoading, setWebLoading] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
-  const [isRecording, setIsRecording] = useState(false);
-  const [recordingUrl, setRecordingUrl] = useState('');
-  const recorder = useRef<MediaRecorder | null>(null);
-  const stream = useRef<MediaStream | null>(null);
-  const recordingParts = useRef<Blob[]>([]);
+
+  // Speech Recognition state
+  const [isListening, setIsListening] = useState(false);
+  const recognitionRef = useRef<any>(null);
   const mounted = useRef(true);
 
   useEffect(() => {
     mounted.current = true;
     return () => {
       mounted.current = false;
-      if (recorder.current?.state === 'recording') recorder.current.stop();
-      stream.current?.getTracks().forEach((track) => track.stop());
+      if (recognitionRef.current) {
+        try { recognitionRef.current.stop(); } catch {}
+      }
     };
   }, []);
 
-  useEffect(() => () => {
-    if (recordingUrl) URL.revokeObjectURL(recordingUrl);
-  }, [recordingUrl]);
-
-  const startRecording = async () => {
-    if (!navigator.mediaDevices?.getUserMedia || typeof MediaRecorder === 'undefined') {
-      setNotice(t('Chức năng ghi âm phụ thuộc vào quyền microphone của trình duyệt.'));
+  const toggleSpeechRecognition = () => {
+    const SpeechRecognitionAPI = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognitionAPI) {
+      setNotice(t('Trình duyệt chưa hỗ trợ nhận diện giọng nói.'));
       return;
     }
-    try {
-      const microphone = await navigator.mediaDevices.getUserMedia({ audio: true });
-      stream.current = microphone;
-      recordingParts.current = [];
-      const nextRecorder = new MediaRecorder(microphone);
-      recorder.current = nextRecorder;
-      nextRecorder.addEventListener('dataavailable', (event) => {
-        if (event.data.size > 0) recordingParts.current.push(event.data);
-      });
-      nextRecorder.addEventListener('stop', () => {
-        microphone.getTracks().forEach((track) => track.stop());
-        stream.current = null;
-        recorder.current = null;
-        if (!mounted.current) return;
-        const audio = new Blob(recordingParts.current, { type: nextRecorder.mimeType || 'audio/webm' });
-        setRecordingUrl(URL.createObjectURL(audio));
-        setIsRecording(false);
-      });
-      nextRecorder.start();
-      setIsRecording(true);
-      setNotice('');
-    } catch {
-      setNotice(t('Không thể truy cập microphone. Hãy cấp quyền microphone hoặc nhập văn bản.'));
-    }
-  };
 
-  const toggleRecording = () => {
-    if (recorder.current?.state === 'recording') recorder.current.stop();
-    else void startRecording();
+    if (isListening) {
+      recognitionRef.current?.stop();
+      setIsListening(false);
+      return;
+    }
+
+    try {
+      const recognition = new SpeechRecognitionAPI();
+      recognition.lang = 'vi-VN';
+      recognition.continuous = false;
+      recognition.interimResults = true;
+
+      recognition.onstart = () => {
+        if (!mounted.current) return;
+        setIsListening(true);
+        setNotice(t('Đang nghe...'));
+      };
+
+      recognition.onresult = (event: any) => {
+        if (!mounted.current) return;
+        let transcript = '';
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          transcript += event.results[i][0].transcript;
+        }
+        setSourceText(transcript.slice(0, MAX_LENGTH));
+      };
+
+      recognition.onerror = () => {
+        if (!mounted.current) return;
+        setIsListening(false);
+        setNotice(t('Không thể nhận diện giọng nói.'));
+      };
+
+      recognition.onend = () => {
+        if (!mounted.current) return;
+        setIsListening(false);
+        setNotice('');
+      };
+
+      recognitionRef.current = recognition;
+      recognition.start();
+    } catch {
+      setIsListening(false);
+      setNotice(t('Không thể khởi động nhận diện giọng nói.'));
+    }
   };
 
   useEffect(() => () => {
@@ -145,12 +151,14 @@ export function TranslatePage({ user, onNavigate }: { onNavigate?: (route: Route
     setNotice('');
     setFileName('');
     setImageUrl('');
-    setWebUrl('');
+    if (isListening && recognitionRef.current) {
+      recognitionRef.current.stop();
+      setIsListening(false);
+    }
   };
 
   const switchKind = (next: InputKind) => {
     if (next === kind) return;
-    if (isRecording) recorder.current?.stop();
     resetInput();
     setKind(next);
   };
@@ -195,58 +203,25 @@ export function TranslatePage({ user, onNavigate }: { onNavigate?: (route: Route
     window.speechSynthesis.speak(utterance);
   };
 
-  const handleFile = async (file: File | undefined) => {
+  const handleImageFile = async (file: File | undefined) => {
     if (!file) return;
     const ext = file.name.slice(file.name.lastIndexOf('.')).toLowerCase();
     setNotice('');
     setLookup(null);
-    if (kind === 'image') {
-      if (!IMAGE_TYPES.split(',').includes(ext)) {
-        setNotice(t('Chỉ hỗ trợ tệp .jpg, .jpeg, .png, .webp.'));
-        return;
-      }
-      setFileName(file.name);
-      setImageUrl(URL.createObjectURL(file));
-      setSourceText('');
-      setNotice(t('Chưa thể tự đọc chữ trong ảnh. Hãy nhập lại nội dung trong ảnh để dịch.'));
-      return;
-    }
-    if (!DOC_TYPES.split(',').includes(ext)) {
-      setNotice(t('Hiện chỉ đọc được tệp .txt, .md, .csv.'));
+    if (!IMAGE_TYPES.split(',').includes(ext)) {
+      setNotice(t('Chỉ hỗ trợ tệp .jpg, .jpeg, .png, .webp.'));
       return;
     }
     setFileName(file.name);
-    setSourceText((await file.text()).slice(0, MAX_LENGTH));
+    setImageUrl(URL.createObjectURL(file));
+    setSourceText('');
+    setNotice(t('Chưa thể tự đọc chữ trong ảnh. Hãy nhập lại nội dung trong ảnh để dịch.'));
   };
 
   const onDrop = (event: React.DragEvent) => {
     event.preventDefault();
     setDragOver(false);
-    void handleFile(event.dataTransfer.files[0]);
-  };
-
-  const translateWeb = async () => {
-    let url: URL;
-    try {
-      url = new URL(webUrl.trim());
-      if (!/^https?:$/.test(url.protocol)) throw new Error();
-    } catch {
-      setNotice(t('Đầu vào phải là một URL web không trống, có định dạng đúng.'));
-      return;
-    }
-    setWebLoading(true);
-    setNotice('');
-    try {
-      const response = await fetch(url.href);
-      if (!response.ok) throw new Error();
-      const doc = new DOMParser().parseFromString(await response.text(), 'text/html');
-      doc.querySelectorAll('script,style,noscript').forEach((node) => node.remove());
-      setSourceText((doc.body?.textContent ?? '').replace(/\s+/g, ' ').trim().slice(0, MAX_LENGTH));
-    } catch {
-      setNotice(t('Không thể tải trang web này (có thể bị trình duyệt chặn). Hãy dán nội dung vào mục Văn bản.'));
-    } finally {
-      setWebLoading(false);
-    }
+    void handleImageFile(event.dataTransfer.files[0]);
   };
 
   const ethnicTabs = (
@@ -265,6 +240,7 @@ export function TranslatePage({ user, onNavigate }: { onNavigate?: (route: Route
       ))}
     </div>
   );
+
   const commonTab = (
     <div className="gt-tabs">
       <button type="button" className="gt-tab gt-tab-active">{t('Tiếng phổ thông')}</button>
@@ -313,7 +289,7 @@ export function TranslatePage({ user, onNavigate }: { onNavigate?: (route: Route
     </div>
   );
 
-  const dropzone = (accept: string, types: string, withPaste: boolean) => (
+  const dropzone = (accept: string, types: string) => (
     <>
       <section
         className={`gt-drop ${dragOver ? 'gt-drop-over' : ''}`}
@@ -328,13 +304,11 @@ export function TranslatePage({ user, onNavigate }: { onNavigate?: (route: Route
         <div className="gt-drop-right">
           <h3>{t('Hoặc chọn một tệp')}</h3>
           <button type="button" className="gt-btn gt-btn-primary" onClick={() => fileInput.current?.click()}>{t('Duyệt qua các tệp')}</button>
-          {withPaste && (
-            <button type="button" className="gt-btn" style={{ height: '35xpx', width: '300px' }} onClick={() => void pasteText()}>
-              <ClipboardPaste size={16} style={{ verticalAlign: -3, marginRight: 6 }} />{t('Dán nội dung từ bảng nhớ tạm')}
-            </button>
-          )}
+          <button type="button" className="gt-btn" style={{ height: '35px', width: '300px' }} onClick={() => void pasteText()}>
+            <ClipboardPaste size={16} style={{ verticalAlign: -3, marginRight: 6 }} />{t('Dán nội dung từ bảng nhớ tạm')}
+          </button>
           <p className="gt-hint">{t('Các loại tệp được hỗ trợ')}: {types}</p>
-          <input ref={fileInput} type="file" accept={accept} hidden onChange={(event) => { void handleFile(event.target.files?.[0]); event.target.value = ''; }} />
+          <input ref={fileInput} type="file" accept={accept} hidden onChange={(event) => { void handleImageFile(event.target.files?.[0]); event.target.value = ''; }} />
         </div>
       </section>
       {(sourceText || imageUrl) && (
@@ -355,34 +329,57 @@ export function TranslatePage({ user, onNavigate }: { onNavigate?: (route: Route
     </>
   );
 
-  const languageSelect = (
-    <select className="tr-select" value={sourceLanguage} onChange={(event) => { setSourceLanguage(event.target.value as SourceLanguage); setLookup(null); }} aria-label={t('Ngôn ngữ nguồn')}>
-      <option value="tay">{t('Tày')}</option>
-      <option value="muong">{t('Mường')}</option>
-    </select>
-  );
-
   return (
     <div className="gt-page">
-      <div className="gt-modes" role="tablist" aria-label={t('Chọn cách nhập nội dung')}>
+      {/* Thanh chuyển đổi mode nhập */}
+      <div 
+        className="gt-modes" 
+        role="tablist" 
+        aria-label={t('Chọn cách nhập nội dung')}
+        style={{ 
+          display: 'inline-flex', 
+          width: 'fit-content', 
+          gap: '6px', 
+          marginBottom: '16px',
+          background: '#f1f5f9',
+          padding: '4px',
+          borderRadius: '12px'
+        }}
+      >
         {kinds.map(({ id, label, icon: Icon }) => (
-          <button key={id} type="button" role="tab" aria-selected={kind === id} className={`gt-mode ${kind === id ? 'gt-mode-active' : ''}`} onClick={() => switchKind(id)}>
+          <button 
+            key={id} 
+            type="button" 
+            role="tab" 
+            aria-selected={kind === id} 
+            className={`gt-mode ${kind === id ? 'gt-mode-active' : ''}`} 
+            style={{ 
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '8px',
+              padding: '8px 16px', 
+              minWidth: 'auto', 
+              borderRadius: '8px',
+              fontSize: '14px',
+              fontWeight: 500,
+              cursor: 'pointer',
+              border: 'none',
+              transition: 'all 0.2s ease'
+            }}
+            onClick={() => switchKind(id)}
+          >
             <Icon size={18} /> {t(label)}
           </button>
         ))}
       </div>
 
-      {kind === 'voice' ? (
-        <div className="tr-lang-row">
-          <span style={{ whiteSpace: 'nowrap' }}>{t('Tiếng phổ thông')}</span>
-          <ArrowRight size={22} />
-          {languageSelect}
-        </div>
-      ) : langBar}
+      {/* Thanh ngôn ngữ */}
+      {langBar}
 
+      {/* Khung dịch văn bản */}
       {kind === 'text' && (
         <>
-          <section className="gt-split">
+          <section className="gt-split gt-split-text" style={{ width: '100%' }}>
             <div className="gt-card">
               <textarea
                 id="source-text"
@@ -396,6 +393,15 @@ export function TranslatePage({ user, onNavigate }: { onNavigate?: (route: Route
                 <button type="button" className="gt-icon gt-clear" onClick={resetInput} aria-label={t('Xóa nội dung')}><X size={20} /></button>
               )}
               <div className="gt-toolbar">
+                <button 
+                  type="button" 
+                  className={`gt-icon ${isListening ? 'gt-icon-active' : ''}`} 
+                  onClick={toggleSpeechRecognition} 
+                  aria-label={t(isListening ? 'Dừng ghi âm' : 'Nhấn để nói')} 
+                  title={t(isListening ? 'Dừng ghi âm' : 'Nhấn để nói')}
+                >
+                  <Mic size={20} color={isListening ? '#ef4444' : undefined} />
+                </button>
                 <button type="button" className="gt-icon" onClick={() => speak(sourceText, 'vi-VN')} disabled={!sourceText.trim() || !reverseDirection} aria-label={t('Nghe')} title={t('Nghe')}><Volume2 size={20} /></button>
                 <button type="button" className="gt-icon" onClick={() => void pasteText()} aria-label={t('Dán văn bản')} title={t('Dán văn bản')}><ClipboardPaste size={20} /></button>
                 <span className="gt-toolbar-spacer" />
@@ -414,75 +420,8 @@ export function TranslatePage({ user, onNavigate }: { onNavigate?: (route: Route
         </>
       )}
 
-      {kind === 'voice' && (
-        <div className="tr-voice-body">
-          <section className={`tr-mic-card ${isRecording ? 'tr-mic-recording' : ''}`}>
-            <button
-              type="button"
-              className="tr-mic-button"
-              onClick={toggleRecording}
-              aria-label={t(isRecording ? 'Dừng ghi âm' : recordingUrl ? 'Ghi âm lại' : 'Bắt đầu ghi âm')}
-              aria-pressed={isRecording}
-            >
-              {isRecording ? <Square size={30} fill="currentColor" /> : <Mic size={38} />}
-            </button>
-            <strong>{t(isRecording ? 'Đang nghe...' : 'Nhấn để nói')}</strong>
-            <div className="tr-wave" aria-hidden="true">
-              {waveformBars.map((height, index) => <span key={index} style={{ height, animationDelay: `${(index % 9) * 70}ms` }} />)}
-            </div>
-            <small>{t('Bạn có thể nói một câu hoặc một đoạn ngắn')}</small>
-            {recordingUrl && !isRecording && <audio className="tr-playback" controls src={recordingUrl} />}
-          </section>
-
-          <section className="tr-line-card">
-            <span className="tr-line-label">{t('Nội dung đã nghe')}</span>
-            <div className="tr-line-row">
-              <textarea
-                value={sourceText}
-                rows={2}
-                onChange={(event) => { setSourceText(event.target.value); setNotice(''); }}
-                placeholder={t('Nhập lại nội dung bạn vừa nói để tra nghĩa')}
-                aria-label={t('Nội dung đã nghe')}
-                maxLength={MAX_LENGTH}
-              />
-              <button type="button" className="tr-link-button" onClick={() => speak(sourceText, 'vi-VN')} disabled={!sourceText.trim()}><Volume2 size={15} /> {t('Nghe')}</button>
-            </div>
-          </section>
-
-          <section className="tr-line-card tr-line-card-warm">
-            <span className="tr-line-label">{t('Bản dịch tiếng dân tộc')}</span>
-            <div className="tr-line-row">
-              <div className="tr-line-result">{translation || t('Bản dịch sẽ hiển thị ở đây')}</div>
-              <button type="button" className="tr-link-button" onClick={() => void copyLookup()} disabled={!matchedSegments.length}><Copy size={15} /> {t('Sao chép')}</button>
-            </div>
-          </section>
-        </div>
-      )}
-
-      {kind === 'image' && dropzone(IMAGE_TYPES, '.jpg, .jpeg, .png, .webp', true)}
-      {kind === 'document' && dropzone(DOC_TYPES, '.txt, .md, .csv', false)}
-
-      {kind === 'web' && (
-        <>
-          <section className="gt-web">
-            <div className="gt-web-row">
-              <div className="gt-field">
-                <label htmlFor="web-url">{t('Trang web')}</label>
-                <input id="web-url" type="url" value={webUrl} onChange={(event) => setWebUrl(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') void translateWeb(); }} placeholder="https://" />
-              </div>
-              <button type="button" className="gt-go" onClick={() => void translateWeb()} disabled={webLoading || !webUrl.trim()} aria-label={t('Dịch trang web')}><ArrowRight size={24} /></button>
-            </div>
-          </section>
-          {sourceText && (
-            <section className="gt-split">
-              <div className="gt-card">
-                <textarea value={sourceText} onChange={(event) => setSourceText(event.target.value)} aria-label={t('Nhập văn bản')} maxLength={MAX_LENGTH} />
-              </div>
-              {resultPanel}
-            </section>
-          )}
-        </>
-      )}
+      {/* Khung tải ảnh */}
+      {kind === 'image' && dropzone(IMAGE_TYPES, '.jpg, .jpeg, .png, .webp')}
 
       {notice && (
         <div className="notice" role="status">
