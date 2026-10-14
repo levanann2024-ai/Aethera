@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { ChevronDown, ChevronUp } from 'lucide-react';
 import { Header, LeafMark, Sidebar } from '@/components/AppLayout';
 import { getCurrentUser, logoutAccount } from '@/backend/api';
 import { AuthPage } from '@/pages/AuthPage';
@@ -14,6 +15,7 @@ import { SettingsPage } from '@/pages/SettingsPage';
 import { TranslatePage } from '@/pages/TranslatePage';
 import { VocabularyPage } from '@/pages/VocabularyPage';
 import { useLanguage } from '@/i18n/useLanguage';
+import { Footer } from '@/components/Footer';
 import type { User } from '@/types/auth';
 import type { Page, Route } from '@/types/navigation';
 
@@ -50,7 +52,14 @@ function App() {
   const [user, setUser] = useState<User | null>(null);
   const [authLoading, setAuthLoading] = useState(true);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [isTopbarHidden, setIsTopbarHidden] = useState(() => localStorage.getItem('aethera.topbarHidden') === '1');
 
+  const toggleTopbar = () => {
+    setIsTopbarHidden((current) => {
+      localStorage.setItem('aethera.topbarHidden', current ? '0' : '1');
+      return !current;
+    });
+  };
   useEffect(() => {
     getCurrentUser()
       .then(setUser)
@@ -103,8 +112,11 @@ function App() {
         onNavigate={navigate}
         onToggle={() => setIsSidebarCollapsed((current) => !current)}
       />
-      <div className={`content-shell ${route === 'home' ? 'content-shell-home' : ''} ${route === 'translate' || route === 'vocabulary' || route === 'contact' || route === 'profile' || route === 'settings' ? 'content-shell-warm' : ''} ${route === 'ai-assistant' ? 'content-shell-ai' : ''}`}>
+      <div className={`content-shell ${route === 'home' ? 'content-shell-home' : ''} ${route === 'translate' || route === 'vocabulary' || route === 'contact' || route === 'profile' || route === 'settings' ? 'content-shell-warm' : ''} ${route === 'ai-assistant' ? 'content-shell-ai' : ''} ${isTopbarHidden ? 'content-shell-topbar-hidden' : ''}`}>
         <Header user={user} onNavigate={navigate} />
+        <button type="button" className="topbar-toggle" onClick={toggleTopbar} aria-label={t(isTopbarHidden ? 'Hiện thanh trên cùng' : 'Ẩn thanh trên cùng')} aria-expanded={!isTopbarHidden}>
+          {isTopbarHidden ? <ChevronDown size={16} /> : <ChevronUp size={16} />}
+        </button>
         <main className="page-content">
           {route === 'home' && <HomePage onNavigate={navigate} user={user} />}
           {route === 'translate' && <TranslatePage onNavigate={navigate} user={user} />}
@@ -120,6 +132,7 @@ function App() {
           {route === 'settings' && <SettingsPage user={user} onNavigate={navigate} onSignOut={handleSignOut} />}
           {route === 'not-found' && <NotFoundPage onNavigate={navigate} />}
         </main>
+        <Footer />
       </div>
     </div>
   );

@@ -48,7 +48,7 @@ function ListenArt() {
 
 const modes: { id: ReviewMode; title: string; subtitle: string; description: string; Art: () => JSX.Element }[] = [
   { id: 'flashcard', title: 'Flashcard', subtitle: 'Lật thẻ nhớ', description: 'Xem từ tiếng địa phương, lật thẻ để kiểm tra nghĩa. Phù hợp để học nhanh từ mới.', Art: FlashcardArt },
-  { id: 'quiz', title: 'Trắc nghiệm 4 đáp án', subtitle: 'Quiz', description: 'Chọn nghĩa Quốc ngữ đúng cho từ hiển thị. Giúp kiểm tra độ thuộc bài cấp tốc.', Art: QuizArt },
+  { id: 'quiz', title: 'Trắc nghiệm 4 đáp án', subtitle: 'Quiz', description: 'Chọn nghĩa Tiếng phổ thông đúng cho từ hiển thị. Giúp kiểm tra độ thuộc bài cấp tốc.', Art: QuizArt },
   { id: 'listen', title: 'Luyện nghe bản địa', subtitle: 'Audio Practice', description: 'Nghe giọng đọc phát âm địa phương và chọn hoặc gõ đúng từ. Giúp rèn kỹ năng nghe.', Art: ListenArt },
 ];
 

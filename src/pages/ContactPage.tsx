@@ -1,147 +1,74 @@
-import { useState } from 'react';
-import type { FormEvent } from 'react';
-import { ArrowRight, BookOpen, Building2, CheckCircle2, Clock, GraduationCap, Heart, Languages, Mail, MessageCircle, Send, ShieldCheck, Users } from 'lucide-react';
-import type { LucideIcon } from 'lucide-react';
-import { useLanguage } from '@/i18n/useLanguage';
-import './contact.css';
-
-type TopicId = 'feedback' | 'translation' | 'education' | 'language' | 'other';
-
-const topics: { id: TopicId; title: string; description: string; icon?: LucideIcon; tone: string }[] = [
-  { id: 'feedback', title: 'Góp ý sản phẩm', description: 'Chia sẻ trải nghiệm, đề xuất tính năng và cải thiện giao diện.', icon: MessageCircle, tone: 'sand' },
-  { id: 'translation', title: 'Báo lỗi bản dịch', description: 'Giúp đội ngũ sửa từ sai nghĩa, cách diễn đạt hoặc phát âm.', icon: Languages, tone: 'mint' },
-  { id: 'education', title: 'Hợp tác giáo dục', description: 'Dành cho giáo viên, trường học và tổ chức cộng đồng.', icon: GraduationCap, tone: 'sky' },
-  { id: 'language', title: 'Đề xuất ngôn ngữ', description: 'Từ vựng, tiếng địa phương cần bổ sung.', icon: BookOpen, tone: 'lime' },
-];
-
-const topicLabels: Record<TopicId, string> = {
-  feedback: 'Góp ý sản phẩm',
-  translation: 'Báo lỗi bản dịch',
-  education: 'Hợp tác giáo dục',
-  language: 'Đề xuất ngôn ngữ địa phương',
-  other: 'Khác',
-};
-
-const STORAGE_KEY = 'aethera.feedback';
-const MAX_LENGTH = 500;
-
-type Errors = { name?: string; email?: string; message?: string };
+import React from 'react';
+import { Mail, Phone, ExternalLink, MessageSquareHeart } from 'lucide-react';
 
 export function ContactPage() {
-  const { t } = useLanguage();
-  const [topic, setTopic] = useState<TopicId>('feedback');
-  const [name, setName] = useState('');
-  const [email, setEmail] = useState('');
-  const [message, setMessage] = useState('');
-  const [errors, setErrors] = useState<Errors>({});
-  const [saved, setSaved] = useState(false);
-
-  const submit = (event: FormEvent) => {
-    event.preventDefault();
-    const next: Errors = {};
-    if (!name.trim()) next.name = 'Vui lòng nhập họ và tên.';
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) next.email = 'Vui lòng nhập email hợp lệ.';
-    if (!message.trim()) next.message = 'Vui lòng nhập nội dung.';
-    setErrors(next);
-    if (Object.keys(next).length) return;
-
-    try {
-      const stored = JSON.parse(localStorage.getItem(STORAGE_KEY) ?? '[]') as unknown[];
-      localStorage.setItem(STORAGE_KEY, JSON.stringify([...stored, { topic, name: name.trim(), email: email.trim(), message: message.trim(), createdAt: Date.now() }]));
-    } catch {
-      // Nothing else to do: the preview does not send data anywhere.
-    }
-    setSaved(true);
-    setName('');
-    setEmail('');
-    setMessage('');
-  };
-
   return (
-    <div className="ct-page">
-      <header className="ct-head">
-        <h1>{t('Liên hệ & Góp ý')}</h1>
-        <p>{t('Mỗi góp ý của bạn giúp Aethera trở nên gần gũi và chính xác hơn với học sinh dân tộc thiểu số.')}</p>
-      </header>
-
-      <div className="ct-topics">
-        {topics.map(({ id, title, description, icon: Icon, tone }) => (
-          <button key={id} type="button" className={`ct-topic ct-topic-${tone} ${topic === id ? 'ct-topic-on' : ''}`} onClick={() => { setTopic(id); setSaved(false); }} aria-pressed={topic === id}>
-            <span className="ct-topic-icon">{Icon && <Icon size={22} />}</span>
-            <strong>{t(title)}</strong>
-            <span>{t(description)}</span>
-            <i><ArrowRight size={14} /></i>
-          </button>
-        ))}
+    <div className="max-w-6xl mx-auto p-6 md:p-10 space-y-8">
+      {/* Tiêu đề trang to rõ */}
+      <div className="space-y-1">
+        <h2 className="text-3xl font-bold text-[#14503F]">Liên hệ & Góp ý</h2>
+        <p className="text-base text-gray-500">Đội ngũ Aethera luôn sẵn sàng lắng nghe và hỗ trợ bạn.</p>
       </div>
 
-      <div className="ct-grid">
-        <form className="ct-form" onSubmit={submit} noValidate>
-          <h2><Mail size={22} /> {t('Gửi lời nhắn cho Aethera')}</h2>
-          <p className="ct-lead">{t('Điền thông tin bên dưới, chúng mình sẽ cố gắng phản hồi sớm nhất có thể.')}</p>
+      {/* Grid 2 Cột Bề Thế, To Rộng */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+        
+        {/* Cột 1: Thông tin liên hệ trực tiếp */}
+        <div className="bg-white p-8 md:p-10 rounded-3xl border border-gray-100 shadow-sm flex flex-col justify-between space-y-8 min-h-[380px]">
+          <div className="space-y-6">
+            <h3 className="text-xl font-bold text-emerald-900 border-b border-gray-100 pb-4">
+              Kênh hỗ trợ trực tiếp
+            </h3>
+            
+            <div className="space-y-4">
+              <div className="flex items-center gap-5 p-5 bg-emerald-50/50 rounded-2xl border border-emerald-100/60">
+                <div className="p-3.5 bg-emerald-700 text-white rounded-xl flex-shrink-0 shadow-sm">
+                  <Mail size={24} />
+                </div>
+                <div>
+                  <p className="text-xs text-gray-400 font-medium uppercase tracking-wider">Email chính thức</p>
+                  <p className="text-base font-bold text-gray-800 mt-0.5">contact@aethera.edu.vn</p>
+                </div>
+              </div>
 
-          {saved && (
-            <div className="ct-saved" role="status">
-              <CheckCircle2 size={18} />
-              <span>{t('Cảm ơn bạn! Lời nhắn đã được lưu trên thiết bị này. Bản xem trước chưa gửi dữ liệu đến máy chủ.')}</span>
+              <div className="flex items-center gap-5 p-5 bg-emerald-50/50 rounded-2xl border border-emerald-100/60">
+                <div className="p-3.5 bg-emerald-700 text-white rounded-xl flex-shrink-0 shadow-sm">
+                  <Phone size={24} />
+                </div>
+                <div>
+                  <p className="text-xs text-gray-400 font-medium uppercase tracking-wider">Hotline / Zalo hỗ trợ</p>
+                  <p className="text-base font-bold text-gray-800 mt-0.5">0123 456 789</p>
+                </div>
+              </div>
             </div>
-          )}
-
-          <div className="ct-row">
-            <label className="ct-field">
-              <span>{t('Họ và tên')} <b>*</b></span>
-              <input value={name} onChange={(event) => setName(event.target.value)} placeholder={t('Tên của bạn')} maxLength={80} aria-invalid={Boolean(errors.name)} />
-              {errors.name && <em>{t(errors.name)}</em>}
-            </label>
-            <label className="ct-field">
-              <span>{t('Email liên hệ')} <b>*</b></span>
-              <input type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="email@example.com" maxLength={120} aria-invalid={Boolean(errors.email)} />
-              {errors.email && <em>{t(errors.email)}</em>}
-            </label>
           </div>
 
-          <fieldset className="ct-radios">
-            <legend>{t('Bạn muốn trao đổi về?')} <b>*</b></legend>
-            {(Object.keys(topicLabels) as TopicId[]).map((id) => (
-              <label key={id}>
-                <input type="radio" name="topic" checked={topic === id} onChange={() => setTopic(id)} />
-                <span>{t(topicLabels[id])}</span>
-              </label>
-            ))}
-          </fieldset>
+          <p className="text-sm text-gray-400 italic text-center">Phản hồi thường được xử lý trong vòng 24 giờ làm việc.</p>
+        </div>
 
-          <label className="ct-field">
-            <span>{t('Nội dung')} <b>*</b></span>
-            <textarea rows={5} value={message} onChange={(event) => setMessage(event.target.value.slice(0, MAX_LENGTH))} placeholder={t('Chia sẻ điều bạn muốn đội ngũ biết...')} aria-invalid={Boolean(errors.message)} />
-            <small className="ct-count">{message.length}/{MAX_LENGTH}</small>
-            {errors.message && <em>{t(errors.message)}</em>}
-          </label>
+        {/* Cột 2: Nút mở Google Form đóng góp ý kiến */}
+        <div className="bg-amber-500/10 border border-amber-200/80 p-8 md:p-10 rounded-3xl shadow-sm flex flex-col justify-between space-y-8 min-h-[380px]">
+          <div className="space-y-4">
+            <div className="w-14 h-14 bg-amber-500 text-white rounded-2xl flex items-center justify-center shadow-md">
+              <MessageSquareHeart size={28} />
+            </div>
+            <h3 className="text-2xl font-bold text-amber-950">Góp ý & Báo lỗi</h3>
+            <p className="text-base text-amber-900/80 leading-relaxed">
+              Mọi ý kiến đóng góp về tính năng hoặc báo lỗi dữ liệu từ vựng đều rất quý giá để Aethera ngày càng hoàn thiện hơn.
+            </p>
+          </div>
 
-          <button type="submit" className="ct-submit"><Send size={17} /> {t('Gửi lời nhắn')}</button>
-          <p className="ct-preview">{t('Bản xem trước này chưa gửi dữ liệu đến máy chủ.')}</p>
-        </form>
+          <a
+            href="https://forms.gle/your-google-form-link" 
+            target="_blank" 
+            rel="noopener noreferrer"
+            className="w-full py-4 px-6 bg-amber-500 hover:bg-amber-600 text-white font-bold text-lg rounded-2xl shadow-md hover:shadow-lg transition-all flex items-center justify-center gap-3 active:scale-98"
+          >
+            <span>Đóng góp qua Google Forms</span>
+            <ExternalLink size={22} />
+          </a>
+        </div>
 
-        <aside className="ct-side">
-          <section className="ct-card">
-            <h3><Users size={20} /> {t('Thông tin đội ngũ')}</h3>
-            <p>{t('Aethera được xây dựng với mong muốn giúp học sinh dân tộc thiểu số dễ dàng tiếp cận tiếng Việt và tri thức.')}</p>
-            <div className="ct-quote"><Heart size={20} /><span>{t('Tiếng nói của bạn là động lực để chúng mình làm tốt hơn!')}</span></div>
-          </section>
-
-          <section className="ct-card">
-            <h3><Mail size={20} /> {t('Liên hệ khác')}</h3>
-            <ul className="ct-info">
-              <li><Mail size={18} /><div><strong>{t('Email dự án')}</strong><span>{t('Sẽ được cập nhật')}</span></div></li>
-              <li><Building2 size={18} /><div><strong>{t('Đơn vị phát triển')}</strong><span>{t('Thông tin chi tiết sẽ được cập nhật')}</span></div></li>
-              <li><Clock size={18} /><div><strong>{t('Thời gian phản hồi')}</strong><span>{t('Trong vòng 2 - 3 ngày làm việc (kể từ khi nhận được thông tin).')}</span></div></li>
-            </ul>
-          </section>
-
-          <section className="ct-card">
-            <h3><ShieldCheck size={20} /> {t('Chính sách & Quyền riêng tư')}</h3>
-            <p>{t('Chúng tôi chỉ thu thập thông tin cần thiết để xử lý yêu cầu của bạn. Mọi dữ liệu được bảo mật và không sử dụng cho mục đích khác.')}</p>
-          </section>
-        </aside>
       </div>
     </div>
   );

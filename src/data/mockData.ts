@@ -73,7 +73,7 @@ export const mockAiSuggestions = [
   },
   {
     title: 'Lưu lại từ mới',
-    body: 'Ghi câu gốc, nghĩa tiếng Việt và một ví dụ do người nói xác nhận để ôn tập lần sau.',
+    body: 'Ghi câu gốc, Tiếng phổ thông và một ví dụ do người nói xác nhận để ôn tập lần sau.',
     tag: 'Bước tiếp theo',
   },
 ];

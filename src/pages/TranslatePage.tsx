@@ -1,11 +1,10 @@
 import { getSettings } from '@/backend/settings';
 import { useEffect, useRef, useState } from 'react';
 import {
-  ArrowRight, BookOpen, ClipboardPaste, Copy, Keyboard, Mic, Search, Square, Volume2, X,
+  ArrowRight, BookOpen, ClipboardPaste, Copy, Keyboard, Mic, Square, Volume2, X, ArrowLeftRight
 } from 'lucide-react';
 import { lookupPhrase } from '@/backend/api';
 import { addStudyRecord } from '@/backend/study-history';
-import { suggestedVocabulary } from '@/data/sampleDictionary';
 import type { PhraseLookup, SourceLanguage } from '@/types/dictionary';
 import type { User } from '@/types/auth';
 import { useLanguage } from '@/i18n/useLanguage';
@@ -16,12 +15,26 @@ export function TranslatePage({ user }: { onNavigate?: (route: 'vocabulary') => 
   const { t } = useLanguage();
   const [sourceText, setSourceText] = useState('');
   const [sourceLanguage, setSourceLanguage] = useState<SourceLanguage>(() => getSettings().defaultLanguage);
+  const [reverseDirection, setReverseDirection] = useState(false);
+
+  const sourceLabel = reverseDirection
+    ? 'Tiếng phổ thông'
+    : sourceLanguage === 'tay' ? 'Tày' : 'Mường';
+
+  const targetLabel = reverseDirection
+    ? sourceLanguage === 'tay' ? 'Tày' : 'Mường'
+    : 'Tiếng phổ thông';
+  const switchDirection = () => {
+  setReverseDirection((prev) => !prev);
+  setSourceText('');
+  setLookup(null);
+  setNotice('');
+};
   const [mode, setMode] = useState<'voice' | 'text'>('text');
   const [lookup, setLookup] = useState<PhraseLookup | null>(null);
   const [notice, setNotice] = useState('');
   const [isRecording, setIsRecording] = useState(false);
   const [recordingUrl, setRecordingUrl] = useState('');
-  const [isLookingUp, setIsLookingUp] = useState(false);
   const recorder = useRef<MediaRecorder | null>(null);
   const stream = useRef<MediaStream | null>(null);
   const recordingParts = useRef<Blob[]>([]);
@@ -84,30 +97,35 @@ export function TranslatePage({ user }: { onNavigate?: (route: 'vocabulary') => 
     setNotice('');
   };
 
-  const runLookup = async () => {
+  useEffect(() => {
     const text = sourceText.trim();
     if (!text) {
-      setNotice(t('Nhập câu tiếng Tày hoặc tiếng Mường đã nghe...'));
+      setLookup(null);
       return;
     }
 
-    setIsLookingUp(true);
-    setNotice('');
-    setLookup(null);
-    try {
-      const result = await lookupPhrase(sourceLanguage, text);
-      setLookup(result);
+    let cancelled = false;
+    const timer = window.setTimeout(async () => {
       try {
-        addStudyRecord(text, result, user?.id);
-      } catch {
-        setNotice(t('Tra cứu xong nhưng không thể lưu lịch sử trên thiết bị này.'));
+        const result = await lookupPhrase(sourceLanguage, text);
+        if (cancelled) return;
+        setLookup(result);
+        setNotice('');
+        try {
+          addStudyRecord(text, result, user?.id);
+        } catch {
+          setNotice('Tra cứu xong nhưng không thể lưu lịch sử trên thiết bị này.');
+        }
+      } catch (error) {
+        if (!cancelled) setNotice(error instanceof Error ? error.message : 'Không thể tải từ điển.');
       }
-    } catch (error) {
-      setNotice(error instanceof Error ? error.message : t('Không thể tải từ điển.'));
-    } finally {
-      setIsLookingUp(false);
-    }
-  };
+    }, 600);
+
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
+  }, [sourceText, sourceLanguage, user?.id]);
 
   const clearTranscript = () => {
     setSourceText('');
@@ -164,12 +182,6 @@ export function TranslatePage({ user }: { onNavigate?: (route: 'vocabulary') => 
     speak(matchedSegments.map((segment) => segment.meaning).join('. '), 'vi-VN');
   };
 
-  const fillSuggestedWord = (word: string) => {
-    setSourceText(word);
-    setLookup(null);
-    setNotice('');
-  };
-
   const languageSelect = (
     <select
       className="tr-select"
@@ -214,11 +226,6 @@ export function TranslatePage({ user }: { onNavigate?: (route: 'vocabulary') => 
 
   return (
     <div className="tr-page">
-      <header className="tr-head">
-        <h1>{t(mode === 'voice' ? 'Dịch bằng giọng nói' : 'Dịch & tra từ')}</h1>
-        <p>{t(mode === 'voice' ? 'Nói bằng tiếng Tày–Mường, ứng dụng sẽ chuyển thành bản dịch Quốc ngữ.' : 'Nhập câu tiếng Tày–Mường để nhận bản dịch Quốc ngữ.')}</p>
-      </header>
-
       <div className="tr-tabs" role="tablist" aria-label={t('Chọn cách nhập nội dung')}>
         <button type="button" role="tab" aria-selected={mode === 'text'} className={mode === 'text' ? 'tr-tab-active' : ''} onClick={() => switchMode('text')}>
           <Keyboard size={16} /> {t('Nhập văn bản')}
@@ -231,11 +238,28 @@ export function TranslatePage({ user }: { onNavigate?: (route: 'vocabulary') => 
       {mode === 'text' && (
         <>
           <section className="tr-split">
+            {/* --- BLOCK BÊN TRÁI --- */}
             <div className="tr-panel">
               <div className="tr-panel-head">
-                <strong>{t('Nhập văn bản')}</strong>
-                {languageSelect}
+                {/* Nếu CHƯA đổi chiều: Bên trái là Tiếng dân tộc (hiển thị select) 
+                    Nếu ĐÃ đổi chiều: Bên trái là Tiếng phổ thông (hiển thị text) */}
+                {!reverseDirection ? (
+                  languageSelect
+                ) : (
+                  <strong>{t(sourceLabel)}</strong>
+                )}
+
+                <button
+                  type="button"
+                  className="tr-icon-button"
+                  aria-label={t('Đổi chiều dịch')}
+                  title={t('Đổi chiều dịch')}
+                  onClick={switchDirection}
+                >
+                  <ArrowLeftRight size={18} />
+                </button>
               </div>
+
               <div className="tr-box tr-box-input">
                 <textarea
                   id="source-text"
@@ -256,11 +280,18 @@ export function TranslatePage({ user }: { onNavigate?: (route: 'vocabulary') => 
               </div>
             </div>
 
+            {/* --- BLOCK BÊN PHẢI --- */}
             <div className="tr-panel">
               <div className="tr-panel-head">
-                <strong>{t('Nghĩa tiếng Việt')}</strong>
-                <span className="tr-select tr-select-static">{t('Quốc ngữ')}</span>
+                {/* Nếu ĐÃ đổi chiều: Bên phải là Tiếng dân tộc (hiển thị select) 
+                    Nếu CHƯA đổi chiều: Bên phải là Tiếng phổ thông (hiển thị text) */}
+                {reverseDirection ? (
+                  languageSelect
+                ) : (
+                  <strong>{t(targetLabel)}</strong>
+                )}
               </div>
+
               <div className="tr-box tr-box-result">{resultContent}</div>
               <div className="tr-result-actions">
                 <button type="button" onClick={speakLookup} disabled={!matchedSegments.length}><Volume2 size={16} /> {t('Nghe')}</button>
@@ -268,25 +299,15 @@ export function TranslatePage({ user }: { onNavigate?: (route: 'vocabulary') => 
               </div>
             </div>
           </section>
-
-          <button type="button" className="tr-submit" onClick={() => void runLookup()} disabled={isLookingUp}>
-            <Search size={18} /> {t(isLookingUp ? 'Đang tra từ...' : 'Tra từ / Dịch')}
-          </button>
-
-          <div className="tr-chips">
-            {suggestedVocabulary.map(({ word }) => (
-              <button type="button" key={word} onClick={() => fillSuggestedWord(word)}>{word}</button>
-            ))}
-          </div>
         </>
       )}
 
       {mode === 'voice' && (
         <div className="tr-voice-body">
           <div className="tr-lang-row">
-            {languageSelect}
+            <span style={{ whiteSpace: 'nowrap' }}>{t('Tiếng phổ thông')}</span>
             <ArrowRight size={22} />
-            <span>{t('Quốc ngữ')}</span>
+            {languageSelect}
           </div>
 
           <section className={`tr-mic-card ${isRecording ? 'tr-mic-recording' : ''}`}>
@@ -327,16 +348,12 @@ export function TranslatePage({ user }: { onNavigate?: (route: 'vocabulary') => 
           </section>
 
           <section className="tr-line-card tr-line-card-warm">
-            <span className="tr-line-label">{t('Bản dịch Quốc ngữ')}</span>
+            <span className="tr-line-label">{t('Bản dịch tiếng dân tộc')}</span>
             <div className="tr-line-row">
               <div className="tr-line-result">{lookup && matchedSegments.length > 0 ? matchedSegments.map((segment) => segment.meaning).join(' · ') : resultContent}</div>
               <button type="button" className="tr-link-button" onClick={() => void copyLookup()} disabled={!matchedSegments.length}><Copy size={15} /> {t('Sao chép')}</button>
             </div>
           </section>
-
-          <button type="button" className="tr-submit tr-submit-yellow" onClick={() => void runLookup()} disabled={isLookingUp || isRecording}>
-            {t(isLookingUp ? 'Đang tra từ...' : lookup ? 'Dịch lại' : 'Dịch')}
-          </button>
         </div>
       )}
 

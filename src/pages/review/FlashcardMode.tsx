@@ -59,7 +59,7 @@ export function FlashcardMode({ initialDeck, onSetLearned, onModes, onBack }: Pr
           <em>{t('Chạm vào thẻ để xem nghĩa')}</em>
         </span>
         <span className="rv-face rv-face-back">
-          <small>{t('Nghĩa tiếng Việt')}</small>
+          <small>{t('Tiếng phổ thông')}</small>
           <strong>{entry.meaning}</strong>
           {entry.example && <em>{entry.example}</em>}
         </span>

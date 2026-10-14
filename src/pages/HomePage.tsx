@@ -62,7 +62,7 @@ function BookArt() {
 }
 
 const cards: HubCard[] = [
-  { route: 'translate', title: 'Dịch giọng nói', description: 'Nói tiếng địa phương, nhận bản dịch Quốc ngữ', tone: 'mint', Art: MicArt },
+  { route: 'translate', title: 'Dịch giọng nói', description: 'Nói tiếng địa phương, nhận Bản dịch tiếng phổ thông', tone: 'mint', Art: MicArt },
   { route: 'ai-assistant', title: 'Trợ lý AI', description: 'Hỏi bài, luyện giao tiếp và hiểu từ khó', tone: 'sky', Art: ChatArt },
   { route: 'vocabulary', title: 'Sổ từ vựng & Ôn tập', description: 'Lưu từ mới và luyện lại những gì đã học', tone: 'sand', Art: BookArt },
 ];
@@ -129,10 +129,9 @@ export function HomePage({ onNavigate }: { onNavigate: (route: Route) => void; u
       <OrnamentArt />
       <LandscapeArt />
 
-      <section className="hub-intro">
-        <div className="hub-kicker">{t('Cùng Aethera xóa bỏ rào cản ngôn ngữ – Giúp bạn tự tin học tập mỗi ngày')}</div>
-        <h1>{t('Hôm nay bạn muốn làm gì?')}</h1>
-        <p>{t('Chọn một cách để bắt đầu học và sử dụng tiếng Tày–Mường.')}</p>
+      <section className="hub-banner">
+        <h1>{t('Học tiếng Tày–Mường mỗi ngày')}</h1>
+        <p style={{ color: "#fff" }}>{t('Cùng Aethera xóa bỏ rào cản ngôn ngữ – Giúp bạn tự tin học tập mỗi ngày')}</p>
       </section>
 
       <section className="hub-cards" aria-label={t('Lối tắt chính')}>

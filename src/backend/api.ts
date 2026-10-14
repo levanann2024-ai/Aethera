@@ -109,6 +109,56 @@ export async function lookupPhrase(language: SourceLanguage, text: string): Prom
   };
 }
 
+export async function lookupVietnameseToEthnic(language: SourceLanguage, text: string): Promise<PhraseLookup> {
+  const tokens = text.trim().split(/\s+/).filter(Boolean);
+  const entries = dictionaryEntries.filter((entry) => entry.sourceLanguage === language);
+  const normalize = (value: string) => value
+    .toLocaleLowerCase()
+    .replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, '');
+  const normalizedTokens = tokens.map(normalize);
+  const searchableEntries = entries
+    .map((entry) => ({ entry, tokens: entry.meaning.split(/\s+/).map(normalize) }))
+    .sort((first, second) => second.tokens.length - first.tokens.length);
+  const segments: PhraseLookup['segments'] = [];
+  let matchedTokens = 0;
+
+  for (let index = 0; index < tokens.length;) {
+    const match = searchableEntries.find(({ tokens: phraseTokens }) => (
+      phraseTokens.length > 0 && phraseTokens.every((token, offset) => normalizedTokens[index + offset] === token)
+    ));
+    if (match) {
+      segments.push({
+        source: tokens.slice(index, index + match.tokens.length).join(' '),
+        meaning: match.entry.sourceTerm,
+        partOfSpeech: match.entry.partOfSpeech,
+        example: match.entry.example,
+        matched: true,
+      });
+      matchedTokens += match.tokens.length;
+      index += match.tokens.length;
+    } else {
+      segments.push({
+        source: tokens[index],
+        meaning: '',
+        partOfSpeech: '',
+        example: '',
+        matched: false,
+      });
+      index += 1;
+    }
+  }
+
+  const totalTokens = tokens.length;
+
+  return {
+    language,
+    segments,
+    matchedTokens,
+    totalTokens,
+    coverage: totalTokens ? Math.round((matchedTokens / totalTokens) * 100) : 0,
+  };
+}
+
 export async function addDictionaryEntry(entry: Omit<DictionaryEntry, 'id'>): Promise<DictionaryEntry> {
   requireSignedInUser();
   const savedEntry = { ...entry, id: `demo-entry-${nextEntryId++}` };

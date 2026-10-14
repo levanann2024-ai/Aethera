@@ -185,8 +185,8 @@ export function VocabularyPage({ user }: { user: User | null }) {
           ))}
         </div>
         <select className="vb-language" value={language} onChange={(event) => setLanguage(event.target.value as SourceLanguage)} aria-label={t('Phương ngữ')}>
-          <option value="tay">{t('Tày')} → {t('Quốc ngữ')}</option>
-          <option value="muong">{t('Mường')} → {t('Quốc ngữ')}</option>
+          <option value="tay">{t('Tày')} → {t('Tiếng phổ thông')}</option>
+          <option value="muong">{t('Mường')} → {t('Tiếng phổ thông')}</option>
         </select>
       </div>
 
@@ -250,7 +250,7 @@ export function VocabularyPage({ user }: { user: User | null }) {
               <input value={sourceTerm} onChange={(event) => setSourceTerm(event.target.value)} maxLength={120} required />
             </label>
             <label>
-              {t('Nghĩa tiếng Việt')}
+              {t('Tiếng phổ thông')}
               <input value={meaning} onChange={(event) => setMeaning(event.target.value)} maxLength={500} required />
             </label>
             <label>

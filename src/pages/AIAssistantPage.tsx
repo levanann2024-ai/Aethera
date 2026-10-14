@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import type { FormEvent } from 'react';
-import { ArrowLeft, ArrowUpRight } from 'lucide-react';
+import { ArrowLeft, ArrowUpRight, Sparkles } from 'lucide-react';
 import { useLanguage } from '@/i18n/useLanguage';
 import { aiModes } from './ai/aiModes';
 import type { AiModeId } from './ai/aiModes';
@@ -37,28 +37,48 @@ export function AIAssistantPage() {
 
   if (!active) {
     return (
-      <div className="aic-launch">
-        <header>
-          <span className="aic-kicker">{t('HỌC THEO CÁCH CỦA BẠN')}</span>
-          <h1>{t('Hôm nay bạn muốn học điều gì?')}</h1>
-          <p>{t('Chọn một cách bắt đầu để học dễ hiểu hơn và tự tin hơn mỗi ngày.')}</p>
-        </header>
+      <div className="aic-launch max-w-6xl mx-auto px-6 py-8 space-y-10">
+        {/* Header bổ sung với màu tiêu đề #14503F */}
+        <div className="text-center space-y-2 mb-2">
+          <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#14503F]/10 text-[#14503F] text-xs font-semibold mb-1">
+            <Sparkles size={14} />
+            <span>{t('TRỢ LÝ THÔNG MINH AETHERA')}</span>
+          </div>
+          <h1 className="text-3xl md:text-4xl font-bold text-[#14503F]">
+            {t('Hôm nay bạn muốn học gì?')}
+          </h1>
+          <p className="text-base text-gray-500 max-w-2xl mx-auto">
+            {t('Chọn một chế độ luyện tập bên dưới hoặc đặt câu hỏi để bắt đầu trò chuyện với AI')}
+          </p>
+        </div>
 
+        {/* Danh sách 5 Card được mở rộng kích thước */}
         <div className="aic-cards">
           {aiModes.map(({ id, title, description, tone, icon: Icon }) => (
             <button key={id} type="button" className={`aic-card aic-card-${tone}`} onClick={() => open(id)}>
-              <span className="aic-card-icon"><Icon size={28} strokeWidth={1.7} /></span>
+              <span className="aic-card-icon"><Icon size={44} strokeWidth={1.8} /></span>
               <strong>{t(title)}</strong>
               <span>{t(description)}</span>
             </button>
           ))}
         </div>
 
+        {/* Khung đặt câu hỏi to rộng */}
         <form className="aic-ask" onSubmit={submitQuestion}>
-          <label htmlFor="aic-question">{t('Hoặc bắt đầu bằng câu hỏi của bạn')}</label>
-          <div>
-            <input id="aic-question" value={question} onChange={(event) => setQuestion(event.target.value)} placeholder={t('Bạn muốn hỏi AI điều gì?')} maxLength={240} />
-            <button type="submit" disabled={!question.trim()}>{t('Gửi câu hỏi')} <ArrowUpRight size={16} /></button>
+          <label htmlFor="aic-question" className="text-base font-semibold text-gray-700 mb-2 block">
+            {t('Hoặc bắt đầu bằng câu hỏi của bạn')}
+          </label>
+          <div className="flex gap-3">
+            <input 
+              id="aic-question" 
+              value={question} 
+              onChange={(event) => setQuestion(event.target.value)} 
+              placeholder={t('Bạn muốn hỏi AI điều gì?')} 
+              maxLength={240} 
+            />
+            <button type="submit" disabled={!question.trim()}>
+              {t('Gửi câu hỏi')} <ArrowUpRight size={18} />
+            </button>
           </div>
         </form>
       </div>
@@ -68,10 +88,12 @@ export function AIAssistantPage() {
   return (
     <div className="aix-page">
       <header className="aix-head">
-        <button type="button" className="aic-back" onClick={() => setMode(null)}><ArrowLeft size={16} /> {t('Quay lại')}</button>
+        <button type="button" className="aic-back" onClick={() => setMode(null)}>
+          <ArrowLeft size={16} /> {t('Quay lại')}
+        </button>
         <div>
           <small>{t('TRỢ LÝ HỌC TẬP')}</small>
-          <h1>{t(active.title)}</h1>
+          <h1 className="text-[#14503F]">{t(active.title)}</h1>
         </div>
       </header>
       <div className="aix-body">

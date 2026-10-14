@@ -155,7 +155,7 @@ export function PracticePage({ onNavigate }: { onNavigate: (route: Route) => voi
             <div><i style={{ width: `${((questionIndex + 1) / questions.length) * 100}%` }} /></div>
           </div>
           <div className="question-head">
-            <div><span>{usingSample ? t('Chọn đáp án đúng') : t('Chọn nghĩa tiếng Việt đúng')} </span><h2>{usingSample ? question.prompt : `“${question.prompt}”`}</h2></div>
+            <div><span>{usingSample ? t('Chọn đáp án đúng') : t('Chọn Tiếng phổ thông đúng')} </span><h2>{usingSample ? question.prompt : `“${question.prompt}”`}</h2></div>
           </div>
           <div className="answer-grid">
             {question.options.map((option, index) => (
