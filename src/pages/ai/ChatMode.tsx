@@ -21,6 +21,11 @@ type Recognition = {
   stop: () => void;
 };
 
+const ETHNICS = ['Mường', 'Thái', 'Tày'] as const;
+const LEVELS = ['Tiểu học', 'THCS', 'THPT'] as const;
+type Ethnic = (typeof ETHNICS)[number];
+type Level = (typeof LEVELS)[number];
+
 const STORAGE_KEY = 'aethera.ai.chats';
 const NEW_TITLE = 'Cuộc trò chuyện mới';
 
@@ -51,6 +56,9 @@ export function ChatMode({ initialText = '', onBack }: { initialText?: string; o
   const [current, setCurrent] = useState<Session>(freshSession);
   const [draft, setDraft] = useState('');
   const [busy, setBusy] = useState(false);
+  const [ethnic, setEthnic] = useState<Ethnic>('Mường');
+  const [level, setLevel] = useState<Level>('Tiểu học');
+  const [toast, setToast] = useState('');
   const [listening, setListening] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(() => window.innerWidth >= 900);
   const endRef = useRef<HTMLDivElement>(null);
@@ -71,6 +79,12 @@ export function ChatMode({ initialText = '', onBack }: { initialText?: string; o
   }, [current.messages.length, busy]);
 
   useEffect(() => () => recognizer.current?.stop(), []);
+
+  useEffect(() => {
+    if (!toast) return;
+    const timer = window.setTimeout(() => setToast(''), 2500);
+    return () => window.clearTimeout(timer);
+  }, [toast]);
 
   const commit = (session: Session) => {
     setCurrent(session);
@@ -104,6 +118,13 @@ export function ChatMode({ initialText = '', onBack }: { initialText?: string; o
     // Runs once for the question typed on the launcher.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const changeMode = (nextEthnic: Ethnic, nextLevel: Level) => {
+    if (nextEthnic === ethnic && nextLevel === level) return;
+    setEthnic(nextEthnic);
+    setLevel(nextLevel);
+    setToast(`Đã chuyển sang chế độ tiếng ${nextEthnic} - ${nextLevel}`);
+  };
 
   const submit = (event: FormEvent) => {
     event.preventDefault();
@@ -157,6 +178,18 @@ export function ChatMode({ initialText = '', onBack }: { initialText?: string; o
             <small>{t('TRỢ LÝ HỌC TẬP')}</small>
             <h1>{t('Trò chuyện với AI')}: {t(current.title)}</h1>
           </div>
+          <div className="aic-modes">
+            <div className="aic-seg" role="group" aria-label={t('Dân tộc')}>
+              {ETHNICS.map((item) => (
+                <button key={item} type="button" className={item === ethnic ? 'aic-seg-on' : ''} aria-pressed={item === ethnic} onClick={() => changeMode(item, level)}>{item}</button>
+              ))}
+            </div>
+            <div className="aic-seg" role="group" aria-label={t('Cấp học')}>
+              {LEVELS.map((item) => (
+                <button key={item} type="button" className={item === level ? 'aic-seg-on' : ''} aria-pressed={item === level} onClick={() => changeMode(ethnic, item)}>{item}</button>
+              ))}
+            </div>
+          </div>
         </header>
 
         <div className="aic-thread" aria-live="polite">
@@ -190,6 +223,7 @@ export function ChatMode({ initialText = '', onBack }: { initialText?: string; o
           <button type="submit" className="aic-send" disabled={!draft.trim() || busy}>{t('Gửi')} <ArrowUpRight size={16} /></button>
         </form>
       </section>
+      {toast && <div className="aic-toast" role="status">{t(toast)}</div>}
     </div>
   );
 }

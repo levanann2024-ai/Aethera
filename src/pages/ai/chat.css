@@ -52,3 +52,13 @@
   .aic-thread { padding: 16px 14px; }
   .aic-chat .aic-composer, .aic-chat .aic-note { margin-left: 14px; margin-right: 14px; }
 }
+
+.aic-bar { flex-wrap: wrap; }
+.aic-modes { margin-left: auto; display: flex; flex-wrap: wrap; gap: 8px; }
+.aic-seg { display: inline-flex; border: 1px solid #d9d4bd; border-radius: 10px; overflow: hidden; }
+.aic-seg button { padding: 6px 12px; background: #fff; color: #14503f; font-size: 13px; font-weight: 700; border: 0; cursor: pointer; }
+.aic-seg button + button { border-left: 1px solid #d9d4bd; }
+.aic-seg .aic-seg-on { background: #14503f; color: #fff; }
+
+.aic-toast { position: fixed; left: 24px; bottom: 24px; z-index: 50; padding: 12px 18px; border-radius: 12px; background: rgba(55,55,55,.78); color: #fff; font-size: 14px; font-weight: 600; backdrop-filter: blur(4px); box-shadow: 0 6px 20px rgba(0,0,0,.2); animation: aic-toast-in .2s ease-out; }
+@keyframes aic-toast-in { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: none; } }
