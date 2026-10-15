@@ -1,12 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import {
   ArrowLeftRight, BookOpen, ClipboardPaste, Copy, FileText, History, Image as ImageIcon,
-  Languages, Mic, Star, UploadCloud, Volume2, X
+  Languages, Mic, Search, Star, UploadCloud, Volume2, X
 } from 'lucide-react';
 import { getSettings } from '@/backend/settings';
-import { lookupPhrase, lookupVietnameseToEthnic } from '@/backend/api';
+import { translateText } from '@/backend/api';
+import type { TranslationMethod } from '@/backend/api';
 import { addStudyRecord } from '@/backend/study-history';
-import { suggestedVocabulary } from '@/data/sampleDictionary';
+import { suggestedVocabularyByLang } from '@/data/sampleDictionary';
 import type { PhraseLookup, SourceLanguage } from '@/types/dictionary';
 import type { User } from '@/types/auth';
 import type { Route } from '@/types/navigation';
@@ -15,8 +16,58 @@ import './translate.css';
 
 type InputKind = 'text' | 'image';
 
+interface SpeechRecognitionResultLike {
+  readonly 0: { transcript: string };
+}
+
+interface SpeechRecognitionEventLike {
+  resultIndex: number;
+  results: ArrayLike<SpeechRecognitionResultLike>;
+}
+
+interface SpeechRecognitionLike {
+  lang: string;
+  continuous: boolean;
+  interimResults: boolean;
+  onstart: (() => void) | null;
+  onresult: ((event: SpeechRecognitionEventLike) => void) | null;
+  onerror: (() => void) | null;
+  onend: (() => void) | null;
+  start(): void;
+  stop(): void;
+}
+
+type SpeechRecognitionConstructor = new () => SpeechRecognitionLike;
+
+declare global {
+  interface Window {
+    SpeechRecognition?: SpeechRecognitionConstructor;
+    webkitSpeechRecognition?: SpeechRecognitionConstructor;
+  }
+}
+
 const MAX_LENGTH = 2000;
 const IMAGE_TYPES = '.jpg,.jpeg,.png,.webp';
+const TTS_MAX_CHUNK_LENGTH = 180;
+
+function splitSpeechText(text: string): string[] {
+  const words = text.match(/\S+/g) ?? [];
+  const chunks: string[] = [];
+  let currentChunk = '';
+
+  for (const word of words) {
+    const nextChunk = currentChunk ? `${currentChunk} ${word}` : word;
+    if (nextChunk.length > TTS_MAX_CHUNK_LENGTH && currentChunk) {
+      chunks.push(currentChunk);
+      currentChunk = word;
+    } else {
+      currentChunk = nextChunk;
+    }
+  }
+
+  if (currentChunk) chunks.push(currentChunk);
+  return chunks;
+}
 
 const kinds: { id: InputKind; label: string; icon: typeof Languages }[] = [
   { id: 'text', label: 'Văn bản', icon: Languages },
@@ -30,6 +81,9 @@ export function TranslatePage({ user, onNavigate }: { onNavigate?: (route: Route
   const [sourceLanguage, setSourceLanguage] = useState<SourceLanguage>(() => getSettings().defaultLanguage);
   const [reverseDirection, setReverseDirection] = useState(false);
   const [lookup, setLookup] = useState<PhraseLookup | null>(null);
+  const [translatedText, setTranslatedText] = useState('');
+  const [translationMethod, setTranslationMethod] = useState<TranslationMethod | null>(null);
+  const [isTranslating, setIsTranslating] = useState(false);
   const [notice, setNotice] = useState('');
   const [fileName, setFileName] = useState('');
   const [imageUrl, setImageUrl] = useState('');
@@ -38,24 +92,32 @@ export function TranslatePage({ user, onNavigate }: { onNavigate?: (route: Route
   const [showOriginalImage, setShowOriginalImage] = useState(true);
   const [dragOver, setDragOver] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
+  const speechAudio = useRef<HTMLAudioElement | null>(null);
+  const speechRequestId = useRef(0);
 
   // Speech Recognition state
   const [isListening, setIsListening] = useState(false);
-  const recognitionRef = useRef<any>(null);
+  const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
   const mounted = useRef(true);
 
   useEffect(() => {
     mounted.current = true;
     return () => {
       mounted.current = false;
+      speechRequestId.current += 1;
+      speechAudio.current?.pause();
       if (recognitionRef.current) {
-        try { recognitionRef.current.stop(); } catch {}
+        try {
+          recognitionRef.current.stop();
+        } catch (error) {
+          console.error('Could not stop speech recognition during cleanup.', error);
+        }
       }
     };
   }, []);
 
   const toggleSpeechRecognition = () => {
-    const SpeechRecognitionAPI = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    const SpeechRecognitionAPI = window.SpeechRecognition || window.webkitSpeechRecognition;
     if (!SpeechRecognitionAPI) {
       setNotice(t('Trình duyệt chưa hỗ trợ nhận diện giọng nói.'));
       return;
@@ -79,7 +141,7 @@ export function TranslatePage({ user, onNavigate }: { onNavigate?: (route: Route
         setNotice(t('Đang nghe...'));
       };
 
-      recognition.onresult = (event: any) => {
+      recognition.onresult = (event) => {
         if (!mounted.current) return;
         let transcript = '';
         for (let i = event.resultIndex; i < event.results.length; i++) {
@@ -116,27 +178,55 @@ export function TranslatePage({ user, onNavigate }: { onNavigate?: (route: Route
     const text = sourceText.trim();
     if (!text) {
       setLookup(null);
+      setTranslatedText('');
+      setTranslationMethod(null);
+      setIsTranslating(false);
       return;
     }
 
     let cancelled = false;
     const timer = window.setTimeout(async () => {
       try {
-        const result = reverseDirection
-          ? await lookupVietnameseToEthnic(sourceLanguage, text)
-          : await lookupPhrase(sourceLanguage, text);
+        const result = await translateText(text, sourceLanguage, reverseDirection);
         if (cancelled) return;
-        setLookup(result);
+        const totalTokens = text.split(/\s+/).filter(Boolean).length;
+        const hasVerifiedTranslation = result.method === 'database' || result.method === 'external_api';
+        const phraseLookup: PhraseLookup = {
+          language: sourceLanguage,
+          segments: [{
+            source: text,
+            meaning: result.translatedText,
+            partOfSpeech: '',
+            example: '',
+            matched: hasVerifiedTranslation,
+          }],
+          matchedTokens: hasVerifiedTranslation ? totalTokens : 0,
+          totalTokens,
+          coverage: hasVerifiedTranslation ? 100 : 0,
+        };
+        setTranslatedText(result.translatedText);
+        setTranslationMethod(result.method);
+        setLookup(phraseLookup);
+        setIsTranslating(false);
         setNotice('');
-        try {
-          addStudyRecord(text, result, user?.id);
-        } catch {
-          setNotice(t('Tra cứu xong nhưng không thể lưu lịch sử trên thiết bị này.'));
+        if (result.translatedText) {
+          try {
+            addStudyRecord(text, phraseLookup, user?.id);
+          } catch {
+            setNotice(t('Tra cứu xong nhưng không thể lưu lịch sử trên thiết bị này.'));
+          }
         }
       } catch (error) {
-        if (!cancelled) setNotice(error instanceof Error ? error.message : t('Không thể tải từ điển.'));
+        if (!cancelled) {
+          setIsTranslating(false);
+          setNotice(error instanceof Error ? error.message : t('Không thể tải từ điển.'));
+        }
       }
-    }, 600);
+    }, 350);
+    setLookup(null);
+    setTranslatedText('');
+    setTranslationMethod(null);
+    setIsTranslating(true);
 
     return () => {
       cancelled = true;
@@ -146,11 +236,53 @@ export function TranslatePage({ user, onNavigate }: { onNavigate?: (route: Route
   }, [sourceText, sourceLanguage, reverseDirection, user?.id]);
 
   const matchedSegments = lookup?.segments.filter((segment) => segment.matched) ?? [];
-  const translation = matchedSegments.map((segment) => segment.meaning).join(' · ');
+  const translation = translatedText || matchedSegments.map((segment) => segment.meaning).join(' · ');
+
+  const runAdvancedTranslation = async () => {
+    const text = sourceText.trim();
+    if (!text || isTranslating) return;
+    setIsTranslating(true);
+    setNotice('');
+    try {
+      const result = await translateText(text, sourceLanguage, reverseDirection, true);
+      if (text !== sourceText.trim()) return;
+      const totalTokens = text.split(/\s+/).filter(Boolean).length;
+      const phraseLookup: PhraseLookup = {
+        language: sourceLanguage,
+        segments: [{
+          source: text,
+          meaning: result.translatedText,
+          partOfSpeech: '',
+          example: '',
+          matched: result.method === 'gemini_ai',
+        }],
+        matchedTokens: result.method === 'gemini_ai' ? totalTokens : 0,
+        totalTokens,
+        coverage: result.method === 'gemini_ai' ? 100 : 0,
+      };
+      setTranslatedText(result.translatedText);
+      setTranslationMethod(result.method);
+      setLookup(phraseLookup);
+      if (result.translatedText) {
+        try {
+          addStudyRecord(text, phraseLookup, user?.id);
+        } catch {
+          setNotice(t('Tra cứu xong nhưng không thể lưu lịch sử trên thiết bị này.'));
+        }
+      }
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : t('Không thể tải từ điển.'));
+    } finally {
+      setIsTranslating(false);
+    }
+  };
 
   const resetInput = () => {
     setSourceText('');
     setLookup(null);
+    setTranslatedText('');
+    setTranslationMethod(null);
+    setIsTranslating(false);
     setNotice('');
     setFileName('');
     setImageUrl('');
@@ -172,6 +304,9 @@ export function TranslatePage({ user, onNavigate }: { onNavigate?: (route: Route
     setReverseDirection((prev) => !prev);
     setSourceText('');
     setLookup(null);
+    setTranslatedText('');
+    setTranslationMethod(null);
+    setIsTranslating(false);
     setNotice('');
   };
 
@@ -208,27 +343,53 @@ export function TranslatePage({ user, onNavigate }: { onNavigate?: (route: Route
   };
 
   const copyLookup = async () => {
-    if (!matchedSegments.length) {
-      setNotice(t('Chưa có mục khớp trong từ điển.'));
+    if (!translatedText) {
+      setNotice(t('Chưa có nội dung để sao chép.'));
       return;
     }
     try {
-      await navigator.clipboard.writeText(matchedSegments.map((segment) => `${segment.source}: ${segment.meaning}`).join('\n'));
+      await navigator.clipboard.writeText(translatedText);
       setNotice(t('Đã sao chép'));
     } catch {
       setNotice(t('Không thể sao chép nội dung trên thiết bị này.'));
     }
   };
 
-  const speak = (text: string, lang: string) => {
-    if (!('speechSynthesis' in window)) {
-      setNotice(t('Trình duyệt chưa hỗ trợ đọc thành tiếng.'));
+  const speak = (text: string) => {
+    if (!text.trim()) {
+      setNotice(t('Chưa có nội dung để đọc.'));
       return;
     }
-    window.speechSynthesis.cancel();
-    const utterance = new SpeechSynthesisUtterance(text);
-    utterance.lang = lang;
-    window.speechSynthesis.speak(utterance);
+
+    speechRequestId.current += 1;
+    const requestId = speechRequestId.current;
+    speechAudio.current?.pause();
+    setNotice('');
+
+    const chunks = splitSpeechText(text);
+    let chunkIndex = 0;
+    const playNextChunk = () => {
+      if (requestId !== speechRequestId.current || chunkIndex >= chunks.length) return;
+      const audioUrl = `https://translate.google.com/translate_tts?ie=UTF-8&q=${encodeURIComponent(chunks[chunkIndex])}&tl=vi&client=tw-ob`;
+      const audio = new Audio(audioUrl);
+      speechAudio.current = audio;
+      audio.onended = () => {
+        chunkIndex += 1;
+        playNextChunk();
+      };
+      audio.onerror = () => {
+        if (requestId === speechRequestId.current) {
+          setNotice(t('Không thể phát giọng đọc trực tuyến. Hãy kiểm tra kết nối mạng rồi thử lại.'));
+        }
+      };
+      void audio.play().catch(() => {
+        if (requestId === speechRequestId.current) {
+          setNotice(t('Không thể phát giọng đọc trực tuyến. Hãy kiểm tra kết nối mạng rồi thử lại.'));
+        }
+      });
+    };
+
+    playNextChunk();
   };
 
   const handleImageFile = async (file: File | undefined) => {
@@ -298,30 +459,59 @@ export function TranslatePage({ user, onNavigate }: { onNavigate?: (route: Route
   const resultPanel = (
     <div className="gt-card gt-card-result">
       <div className="gt-result-body" aria-live="polite">
-        {!lookup && (
+        {isTranslating && (
+          <div className="gt-translation-loading" role="status" aria-label={t('Đang dịch...')}>
+            <span />
+            <span />
+            <span />
+          </div>
+        )}
+        {!isTranslating && !lookup && (
           <div className="gt-empty"><BookOpen size={28} strokeWidth={1.4} /><span>{t('Bản dịch sẽ hiển thị ở đây')}</span></div>
         )}
-        {lookup && !matchedSegments.length && (
+        {!isTranslating && translationMethod === 'advanced_required' && (
+          <div className="gt-advanced-prompt">
+            <span>{t('Cần dịch nâng cao cho nội dung này.')}</span>
+            <button type="button" className="gt-advanced-button" onClick={() => void runAdvancedTranslation()}>
+              <Search size={17} />
+              {t('Dịch nâng cao')}
+            </button>
+          </div>
+        )}
+        {!isTranslating && translationMethod !== 'advanced_required' && lookup && !translatedText && !matchedSegments.length && (
           <div className="gt-empty"><BookOpen size={28} strokeWidth={1.4} /><span>{t('Chưa có mục khớp trong từ điển.')}</span></div>
         )}
-        {lookup && matchedSegments.length > 0 && (
+        {!isTranslating && translatedText && (
           <>
             <p className="gt-result-main">{translation}</p>
-            <ul className="gt-parts">
-              {lookup.segments.map((segment, index) => (
-                <li key={`${segment.source}-${index}`} className={segment.matched ? '' : 'gt-missing'}>
-                  <strong>{segment.source}</strong>
-                  <span>{segment.matched ? segment.meaning : t('Chưa có trong từ điển')}</span>
-                </li>
-              ))}
-            </ul>
+            {translationMethod === 'gemini_ai' && (
+              <span className="gt-ai-badge">{t('✨ Được dịch bởi AI')}</span>
+            )}
+            {matchedSegments.length > 0 && (
+              <ul className="gt-parts">
+                {lookup?.segments.map((segment, index) => (
+                  <li key={`${segment.source}-${index}`}>
+                    <strong>{segment.source}</strong>
+                    <span>{segment.meaning}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
           </>
         )}
       </div>
       <div className="gt-toolbar">
-        <button type="button" className="gt-icon" onClick={() => speak(translation, 'vi-VN')} disabled={!matchedSegments.length} aria-label={t('Nghe')} title={t('Nghe')}><Volume2 size={20} /></button>
+        <button 
+              type="button" 
+              className="gt-icon" 
+              onClick={() => void speak(translation)} 
+              aria-label={t('Nghe')} 
+              title={t('Nghe')}
+            >
+              <Volume2 size={40} />
+            </button>
         <span className="gt-toolbar-spacer" />
-        <button type="button" className="gt-icon" onClick={() => void copyLookup()} disabled={!matchedSegments.length} aria-label={t('Sao chép')} title={t('Sao chép')}><Copy size={20} /></button>
+        <button type="button" className="gt-icon" onClick={() => void copyLookup()} disabled={!translatedText || isTranslating} aria-label={t('Sao chép')} title={t('Sao chép')}><Copy size={20} /></button>
         <button type="button" className="gt-icon" onClick={() => onNavigate?.('vocabulary')} aria-label={t('Xem từ điển')} title={t('Xem từ điển')}><BookOpen size={20} /></button>
       </div>
     </div>
@@ -425,7 +615,15 @@ export function TranslatePage({ user, onNavigate }: { onNavigate?: (route: Route
                 >
                   <Mic size={20} color={isListening ? '#ef4444' : undefined} />
                 </button>
-                <button type="button" className="gt-icon" onClick={() => speak(sourceText, 'vi-VN')} disabled={!sourceText.trim() || !reverseDirection} aria-label={t('Nghe')} title={t('Nghe')}><Volume2 size={20} /></button>
+                <button 
+                    type="button" 
+                    className="gt-icon" 
+                    onClick={() => void speak(sourceText)} 
+                    aria-label={t('Nghe')} 
+                    title={t('Nghe')}
+                  >
+                    <Volume2 size={20} />
+                 </button>
                 <button type="button" className="gt-icon" onClick={() => void pasteText()} aria-label={t('Dán văn bản')} title={t('Dán văn bản')}><ClipboardPaste size={20} /></button>
                 <span className="gt-toolbar-spacer" />
                 <span className="gt-count">{sourceText.length} / {MAX_LENGTH}</span>
@@ -435,7 +633,7 @@ export function TranslatePage({ user, onNavigate }: { onNavigate?: (route: Route
           </section>
           <div className="gt-chips" aria-label={t('Gợi ý từ điển')}>
             <span className="gt-chips-label">{t('Gợi ý từ điển')}:</span>
-            {suggestedVocabulary.map(({ word, meaning }) => {
+            {suggestedVocabularyByLang[sourceLanguage].map(({ word, meaning }) => {
               const value = reverseDirection ? meaning.split(/[,.]/)[0].trim() : word;
               return <button key={word} type="button" className="gt-chip" title={meaning} onClick={() => setSourceText(value)}>{value}</button>;
             })}

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Check, Pin, Search, Volume2 } from 'lucide-react';
 import { searchDictionary } from '@/backend/api';
 import { useVocabularyProgress } from '@/backend/vocabulary-progress';
-import { suggestedVocabulary } from '@/data/sampleDictionary';
+import { suggestedVocabularyByLang } from '@/data/sampleDictionary';
 import { useLanguage } from '@/i18n/useLanguage';
 import { normalizeWord, speakText } from '@/pages/review/reviewUtils';
 import type { DictionaryEntry, PhraseLookup } from '@/types/dictionary';
@@ -41,6 +41,7 @@ export function ExplainTool({ initialText = '' }: { initialText?: string }) {
   const segment = lookup?.segments[selected];
   const entry = segment?.matched ? entries.find((item) => normalizeWord(item.sourceTerm) === normalizeWord(segment.source)) : undefined;
   const understood = lookup ? lookup.segments.filter((item) => item.matched).length : 0;
+  const suggestedVocabulary = Object.values(suggestedVocabularyByLang).flat();
 
   return (
     <div className="aix-explain">

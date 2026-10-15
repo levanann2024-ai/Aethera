@@ -1,9 +1,10 @@
 import { searchDictionary } from '@/backend/api';
-import { suggestedVocabulary } from '@/data/sampleDictionary';
+import { suggestedVocabularyByLang } from '@/data/sampleDictionary';
 import { bestLookup } from './aiModes';
 
 export type ChatReply = { text: string; chips?: string[] };
 
+const suggestedVocabulary = Object.values(suggestedVocabularyByLang).flat();
 const wordChips = suggestedVocabulary.map(({ word }) => word);
 
 export function chatIntro(): ChatReply {

@@ -1,6 +1,95 @@
 import type { User } from '@/types/auth';
 import type { DictionaryEntry, PhraseLookup, SourceLanguage } from '@/types/dictionary';
+import { mainDictionary } from '@/data/mainDictionary';
 import { sampleDictionaryEntries } from '@/data/sampleDictionary';
+
+export type TranslationMethod = 'database' | 'external_api' | 'advanced_required' | 'gemini_ai';
+
+export interface TextTranslation {
+  translatedText: string;
+  method: TranslationMethod;
+}
+
+interface TayApiTranslationResponse {
+  exact?: Array<{ source?: string; target?: string }>;
+  suggestions?: Array<{ tay?: string; viet?: string }>;
+}
+
+function normalizeTranslationText(text: string): string {
+  return text
+    .trim()
+    .toLocaleLowerCase()
+    .replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, '')
+    .replace(/\s+/g, ' ');
+}
+
+export async function translateText(
+  text: string,
+  sourceLang: SourceLanguage,
+  reverseDirection = false,
+  useAdvancedTranslation = false,
+): Promise<TextTranslation> {
+  const normalizedText = normalizeTranslationText(text);
+  if (!normalizedText) return { translatedText: '', method: 'database' };
+
+  const wordCount = normalizedText.split(/\s+/).length;
+  const entries = Object.entries(mainDictionary[sourceLang] ?? {});
+  const dictionaryMatch = reverseDirection
+    ? entries.find(([source]) => normalizeTranslationText(source) === normalizedText)
+    : entries.find(([, translation]) => (
+      translation.split(',').some((candidate) => normalizeTranslationText(candidate) === normalizedText)
+    ));
+  if (dictionaryMatch) {
+    return {
+      translatedText: reverseDirection ? dictionaryMatch[1] : dictionaryMatch[0],
+      method: 'database',
+    };
+  }
+
+  if (useAdvancedTranslation) {
+    await new Promise((resolve) => setTimeout(resolve, 500));
+    return {
+      translatedText: '[AI Mock] Hệ thống sẽ dịch đoạn văn này khi kết nối backend.',
+      method: 'gemini_ai',
+    };
+  }
+
+  if (wordCount >= 20 || sourceLang !== 'tay') {
+    return { translatedText: '', method: 'advanced_required' };
+  }
+
+  if (sourceLang === 'tay') {
+    try {
+      const response = await fetch(TAY_API_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(reverseDirection ? { viet: text.trim() } : { tay: text.trim() }),
+      });
+      if (!response.ok) {
+        throw new Error(`Tày translation API request failed with HTTP ${response.status}.`);
+      }
+
+      const payload: unknown = await response.json();
+      if (payload && typeof payload === 'object') {
+        const apiResult = payload as TayApiTranslationResponse;
+        const exact = apiResult.exact?.[0];
+        const suggestion = apiResult.suggestions?.[0];
+        const translatedText = reverseDirection
+          ? exact?.target || suggestion?.tay
+          : exact?.target || suggestion?.viet;
+        if (translatedText?.trim()) {
+          return { translatedText: translatedText.trim(), method: 'external_api' };
+        }
+      }
+      return { translatedText: '', method: 'advanced_required' };
+    } catch (error) {
+      console.warn('Tày translation API failed; advanced translation is available.', error);
+      return { translatedText: '', method: 'advanced_required' };
+    }
+  }
+
+  return { translatedText: '', method: 'advanced_required' };
+}
 
 // API configuration for Vietnamese-Tay translation
 const TAY_API_URL = import.meta.env.VITE_TAY_API_URL || 'https://admin.taynung.com/api/words/trans';
@@ -10,7 +99,7 @@ let activeUser: User | null = null;
 let nextEntryId = 1;
 
 // Helper function to create an empty PhraseLookup result
-function emptyPhraseLookup(language: SourceLanguage): PhraseLookup { // Returns empty result for no input
+function emptyPhraseLookup(language: SourceLanguage): PhraseLookup {
   return {
     language,
     segments: [],
@@ -73,197 +162,202 @@ export async function searchDictionary(language: SourceLanguage, query = ''): Pr
   ));
 }
 
+// ==========================================
+// 1. LOOKUP PHRASE (Tày -> Việt) - 3 BƯỚC
+// ==========================================
 export async function lookupPhrase(language: SourceLanguage, text: string): Promise<PhraseLookup> {
-  // For Muong language, continue using sample dictionary as requested
+  const trimmedText = text.trim();
+  if (!trimmedText) {
+    return emptyPhraseLookup(language);
+  }
+
+  const normalizedText = normalizeTranslationText(trimmedText);
+  const wordCount = normalizedText.split(/\s+/).filter(Boolean).length;
+
+  // Đối với ngôn ngữ Mường, sử dụng mock/từ điển mẫu
   if (language === 'muong') {
     return lookupPhraseMock(language, text);
   }
 
-  // For Tay language, use the API endpoint
   if (language === 'tay') {
-    try {
-      // Split text into words for translation
-      const words = text.trim().split(/\s+/).filter(Boolean);
-      if (words.length === 0) {
-        return emptyPhraseLookup(language);
+    // BƯỚC 1: Tra từ điển nội bộ (mainDictionary) trước
+    if (mainDictionary && mainDictionary[language]) {
+      const langDict = mainDictionary[language];
+      const entries = Object.entries(langDict);
+      const directMatch = entries.find(([source]) => normalizeTranslationText(source) === normalizedText);
+      
+      if (directMatch) {
+        return {
+          language,
+          segments: [{
+            source: trimmedText,
+            meaning: directMatch[1],
+            partOfSpeech: '',
+            example: '',
+            matched: true,
+          }],
+          matchedTokens: 1,
+          totalTokens: 1,
+          coverage: 100,
+        };
       }
+    }
 
-      // Translate each word using the API
-      const segments = await Promise.all(
-        words.map(async (word) => {
-          try {
-            const response = await fetch(TAY_API_URL, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ tay: word }),
-            });
+    // BƯỚC 2: Nếu không có trong từ điển nội bộ nhưng dưới 20 từ, gọi trực tiếp API của taynung.com
+    if (wordCount < 20) {
+      try {
+        const response = await fetch(TAY_API_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ tay: trimmedText }),
+        });
 
-            if (!response.ok) {
-              const details = await response.text();
-              throw new Error(`Translation request failed: HTTP ${response.status}${details ? ` - ${details}` : ''}`);
-            }
-
-            const apiResponse = await response.json();
-
-            // Transform API response to PhraseLookup segment format
-            if (apiResponse.exact && apiResponse.exact.length > 0) {
-              const exactMatch = apiResponse.exact[0];
-              return {
-                source: exactMatch.source,
+        if (response.ok) {
+          const apiResponse = await response.json();
+          if (apiResponse.exact && apiResponse.exact.length > 0) {
+            const exactMatch = apiResponse.exact[0];
+            return {
+              language,
+              segments: [{
+                source: exactMatch.source || trimmedText,
                 meaning: exactMatch.target,
-                partOfSpeech: '', // Not provided in API response
-                example: '',      // Not provided in API response
+                partOfSpeech: '',
+                example: '',
                 matched: true,
-              };
-            } else if (apiResponse.suggestions && apiResponse.suggestions.length > 0) {
-              // Use first suggestion if no exact match
-              const suggestion = apiResponse.suggestions[0];
-              return {
-                source: suggestion.tay,
+              }],
+              matchedTokens: 1,
+              totalTokens: 1,
+              coverage: 100,
+            };
+          } else if (apiResponse.suggestions && apiResponse.suggestions.length > 0) {
+            const suggestion = apiResponse.suggestions[0];
+            return {
+              language,
+              segments: [{
+                source: suggestion.tay || trimmedText,
                 meaning: suggestion.viet,
                 partOfSpeech: '',
                 example: '',
                 matched: true,
-              };
-            } else {
-              // No translation found
-              return {
-                source: word,
-                meaning: '',
-                partOfSpeech: '',
-                example: '',
-                matched: false,
-              };
-            }
-          } catch (error) {
-            console.warn(`Failed to translate word "${word}":`, error);
-            // Return unmatched segment on error
-            return {
-              source: word,
-              meaning: '',
-              partOfSpeech: '',
-              example: '',
-              matched: false,
+              }],
+              matchedTokens: 1,
+              totalTokens: 1,
+              coverage: 100,
             };
           }
-        })
-      );
-
-      // Calculate statistics
-      const matchedTokens = segments.filter(s => s.matched).length;
-      const totalTokens = words.length;
-
-      return {
-        language,
-        segments,
-        matchedTokens,
-        totalTokens,
-        coverage: totalTokens ? Math.round((matchedTokens / totalTokens) * 100) : 0,
-      };
-    } catch (error) {
-      console.warn('Tay API lookup failed, falling back to mock data:', error);
-      return lookupPhraseMock(language, text);
+        }
+      } catch (error) {
+        console.warn('Tay API lookup failed:', error);
+      }
     }
+
+    // BƯỚC 3: Nếu trên 20 từ hoặc không tìm thấy/lỗi API -> Nhảy vào nhánh Mock AI / Fallback
+    if (wordCount >= 20) {
+      console.log('Văn bản trên 20 từ, chuyển sang nhánh Mock AI (Gemini)...');
+    }
+    return lookupPhraseMock(language, text);
   }
 
-  // Fallback (should not reach here with current SourceLanguage types)
   return lookupPhraseMock(language, text);
 }
 
+// ==========================================
+// 2. LOOKUP VIETNAMESE TO ETHNIC (Việt -> Tày) - 3 BƯỚC
+// ==========================================
 export async function lookupVietnameseToEthnic(language: SourceLanguage, text: string): Promise<PhraseLookup> {
-  // For Muong language, continue using sample dictionary as requested
+  const trimmedText = text.trim();
+  if (!trimmedText) {
+    return emptyPhraseLookup(language);
+  }
+
+  const normalizedText = normalizeTranslationText(trimmedText);
+  const wordCount = normalizedText.split(/\s+/).filter(Boolean).length;
+
   if (language === 'muong') {
     return lookupVietnameseToEthnicMock(language, text);
   }
 
-  // For Tay language, use the API endpoint
   if (language === 'tay') {
-    try {
-      // Split text into words for translation
-      const words = text.trim().split(/\s+/).filter(Boolean);
-      if (words.length === 0) {
-        return emptyPhraseLookup(language);
+    // BƯỚC 1: Tra từ điển nội bộ (mainDictionary) trước (tìm theo nghĩa tiếng Việt)
+    if (mainDictionary && mainDictionary[language]) {
+      const langDict = mainDictionary[language];
+      const entries = Object.entries(langDict);
+      const reverseMatch = entries.find(([, translation]) =>
+        translation.split(',').some((candidate) => normalizeTranslationText(candidate) === normalizedText)
+      );
+
+      if (reverseMatch) {
+        return {
+          language,
+          segments: [{
+            source: trimmedText,
+            meaning: reverseMatch[0], // Từ tiếng Tày gốc
+            partOfSpeech: '',
+            example: '',
+            matched: true,
+          }],
+          matchedTokens: 1,
+          totalTokens: 1,
+          coverage: 100,
+        };
       }
+    }
 
-      // Translate each word using the API
-      const segments = await Promise.all(
-        words.map(async (word) => {
-          try {
-            const response = await fetch(TAY_API_URL, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ viet: word }),
-            });
+    // BƯỚC 2: Nếu không có trong từ điển nội bộ nhưng dưới 20 từ, gọi trực tiếp API của taynung.com
+    if (wordCount < 20) {
+      try {
+        const response = await fetch(TAY_API_URL, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ viet: trimmedText }),
+        });
 
-            if (!response.ok) {
-              const details = await response.text();
-              throw new Error(`Translation request failed: HTTP ${response.status}${details ? ` - ${details}` : ''}`);
-            }
-
-            const apiResponse = await response.json();
-
-            // Transform API response to PhraseLookup segment format
-            if (apiResponse.exact && apiResponse.exact.length > 0) {
-              const exactMatch = apiResponse.exact[0];
-              return {
-                source: exactMatch.source,
+        if (response.ok) {
+          const apiResponse = await response.json();
+          if (apiResponse.exact && apiResponse.exact.length > 0) {
+            const exactMatch = apiResponse.exact[0];
+            return {
+              language,
+              segments: [{
+                source: exactMatch.source || trimmedText,
                 meaning: exactMatch.target,
-                partOfSpeech: '', // Not provided in API response
-                example: '',      // Not provided in API response
+                partOfSpeech: '',
+                example: '',
                 matched: true,
-              };
-            } else if (apiResponse.suggestions && apiResponse.suggestions.length > 0) {
-              // Use first suggestion if no exact match
-              const suggestion = apiResponse.suggestions[0];
-              return {
-                source: suggestion.viet,
+              }],
+              matchedTokens: 1,
+              totalTokens: 1,
+              coverage: 100,
+            };
+          } else if (apiResponse.suggestions && apiResponse.suggestions.length > 0) {
+            const suggestion = apiResponse.suggestions[0];
+            return {
+              language,
+              segments: [{
+                source: suggestion.viet || trimmedText,
                 meaning: suggestion.tay,
                 partOfSpeech: '',
                 example: '',
                 matched: true,
-              };
-            } else {
-              // No translation found
-              return {
-                source: word,
-                meaning: '',
-                partOfSpeech: '',
-                example: '',
-                matched: false,
-              };
-            }
-          } catch (error) {
-            console.warn(`Failed to translate word "${word}":`, error);
-            // Return unmatched segment on error
-            return {
-              source: word,
-              meaning: '',
-              partOfSpeech: '',
-              example: '',
-              matched: false,
+              }],
+              matchedTokens: 1,
+              totalTokens: 1,
+              coverage: 100,
             };
           }
-        })
-      );
-
-      // Calculate statistics
-      const matchedTokens = segments.filter(s => s.matched).length;
-      const totalTokens = words.length;
-
-      return {
-        language,
-        segments,
-        matchedTokens,
-        totalTokens,
-        coverage: totalTokens ? Math.round((matchedTokens / totalTokens) * 100) : 0,
-      };
-    } catch (error) {
-      console.warn('Tay API lookup failed, falling back to mock data:', error);
-      return lookupVietnameseToEthnicMock(language, text);
+        }
+      } catch (error) {
+        console.warn('Tay API lookup failed:', error);
+      }
     }
+
+    // BƯỚC 3: Nếu trên 20 từ hoặc lỗi API -> Nhảy vào nhánh Mock AI / Fallback
+    if (wordCount >= 20) {
+      console.log('Văn bản trên 20 từ, chuyển sang nhánh Mock AI (Gemini)...');
+    }
+    return lookupVietnameseToEthnicMock(language, text);
   }
 
-  // Fallback (should not reach here with current SourceLanguage types)
   return lookupVietnameseToEthnicMock(language, text);
 }
 
