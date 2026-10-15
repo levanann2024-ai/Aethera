@@ -33,6 +33,9 @@ export function TranslatePage({ user, onNavigate }: { onNavigate?: (route: Route
   const [notice, setNotice] = useState('');
   const [fileName, setFileName] = useState('');
   const [imageUrl, setImageUrl] = useState('');
+  const [imageReady, setImageReady] = useState(false);
+  const [imageLoadError, setImageLoadError] = useState(false);
+  const [showOriginalImage, setShowOriginalImage] = useState(true);
   const [dragOver, setDragOver] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
 
@@ -151,6 +154,8 @@ export function TranslatePage({ user, onNavigate }: { onNavigate?: (route: Route
     setNotice('');
     setFileName('');
     setImageUrl('');
+    setImageReady(false);
+    setImageLoadError(false);
     if (isListening && recognitionRef.current) {
       recognitionRef.current.stop();
       setIsListening(false);
@@ -176,6 +181,29 @@ export function TranslatePage({ user, onNavigate }: { onNavigate?: (route: Route
       if (text) setSourceText(text.slice(0, MAX_LENGTH));
     } catch {
       setNotice(t('Không thể đọc nội dung từ bộ nhớ tạm trên thiết bị này.'));
+    }
+  };
+
+  const pasteImage = async () => {
+    if (!navigator.clipboard?.read) {
+      setNotice(t('Trình duyệt chưa hỗ trợ dán ảnh từ bộ nhớ tạm.'));
+      return;
+    }
+
+    try {
+      const clipboardItems = await navigator.clipboard.read();
+      for (const item of clipboardItems) {
+        const imageType = item.types.find((type) => type.startsWith('image/'));
+        if (!imageType) continue;
+        const blob = await item.getType(imageType);
+        const extension = imageType.split('/')[1]?.replace('jpeg', 'jpg') || 'png';
+        const file = new File([blob], `clipboard-image.${extension}`, { type: imageType });
+        await handleImageFile(file);
+        return;
+      }
+      setNotice(t('Không tìm thấy ảnh trong bộ nhớ tạm.'));
+    } catch {
+      setNotice(t('Không thể đọc ảnh từ bộ nhớ tạm trên thiết bị này.'));
     }
   };
 
@@ -213,9 +241,19 @@ export function TranslatePage({ user, onNavigate }: { onNavigate?: (route: Route
       return;
     }
     setFileName(file.name);
-    setImageUrl(URL.createObjectURL(file));
+    setImageReady(false);
+    setImageLoadError(false);
+    const nextImageUrl = URL.createObjectURL(file);
+    setImageUrl(nextImageUrl);
     setSourceText('');
-    setNotice(t('Chưa thể tự đọc chữ trong ảnh. Hãy nhập lại nội dung trong ảnh để dịch.'));
+    const previewImage = new Image();
+    previewImage.onload = () => setImageReady(true);
+    previewImage.onerror = () => {
+      setImageReady(false);
+      setImageLoadError(true);
+      setNotice(t('Không thể tải ảnh này. Vui lòng thử một tệp khác.'));
+    };
+    previewImage.src = nextImageUrl;
   };
 
   const onDrop = (event: React.DragEvent) => {
@@ -298,39 +336,24 @@ export function TranslatePage({ user, onNavigate }: { onNavigate?: (route: Route
         onDrop={onDrop}
       >
         <div className="gt-drop-left">
-          {imageUrl ? <img className="gt-preview" src={imageUrl} alt={fileName} /> : <div className="gt-cloud"><UploadCloud size={56} /></div>}
-          {fileName ? <span className="gt-file"><FileText size={18} /> {fileName}</span> : <span className="gt-drop-title">{t('Kéo và thả')}</span>}
+          <div className="gt-cloud"><UploadCloud size={56} /></div>
+          <span className="gt-drop-title">{t('Kéo và thả')}</span>
         </div>
         <div className="gt-drop-right">
           <h3>{t('Hoặc chọn một tệp')}</h3>
           <button type="button" className="gt-btn gt-btn-primary" onClick={() => fileInput.current?.click()}>{t('Duyệt qua các tệp')}</button>
-          <button type="button" className="gt-btn" style={{ height: '35px', width: '300px' }} onClick={() => void pasteText()}>
-            <ClipboardPaste size={16} style={{ verticalAlign: -3, marginRight: 6 }} />{t('Dán nội dung từ bảng nhớ tạm')}
+          <button type="button" className="gt-btn gt-btn-paste-image" onClick={() => void pasteImage()}>
+            <ClipboardPaste size={16} />{t('Dán tệp từ bảng nhớ tạm')}
           </button>
           <p className="gt-hint">{t('Các loại tệp được hỗ trợ')}: {types}</p>
           <input ref={fileInput} type="file" accept={accept} hidden onChange={(event) => { void handleImageFile(event.target.files?.[0]); event.target.value = ''; }} />
         </div>
       </section>
-      {(sourceText || imageUrl) && (
-        <section className="gt-split">
-          <div className="gt-card">
-            <textarea
-              value={sourceText}
-              onChange={(event) => setSourceText(event.target.value)}
-              placeholder={t('Nhập nội dung cần dịch...')}
-              aria-label={t('Nhập văn bản')}
-              maxLength={MAX_LENGTH}
-            />
-            <div className="gt-toolbar"><span className="gt-toolbar-spacer" /><span className="gt-count">{sourceText.length} / {MAX_LENGTH}</span></div>
-          </div>
-          {resultPanel}
-        </section>
-      )}
     </>
   );
 
   return (
-    <div className="gt-page">
+    <div className={`gt-page ${kind === 'image' ? 'gt-page-image' : ''}`}>
       {/* Thanh chuyển đổi mode nhập */}
       <div 
         className="gt-modes" 
@@ -421,7 +444,74 @@ export function TranslatePage({ user, onNavigate }: { onNavigate?: (route: Route
       )}
 
       {/* Khung tải ảnh */}
-      {kind === 'image' && dropzone(IMAGE_TYPES, '.jpg, .jpeg, .png, .webp')}
+      {kind === 'image' && (
+        imageUrl ? (
+          <section className={`gt-image-result ${showOriginalImage ? '' : 'gt-image-result-single'}`}>
+            <div className="gt-image-toolbar">
+              <label className="gt-original-toggle">
+                <span>{t('Hiện bản gốc')}</span>
+                <input
+                  type="checkbox"
+                  role="switch"
+                  checked={showOriginalImage}
+                  onChange={(event) => setShowOriginalImage(event.target.checked)}
+                  aria-label={t('Hiện bản gốc')}
+                />
+              </label>
+              <span className="gt-image-file"><FileText size={16} />{fileName}</span>
+              <button type="button" className="gt-image-action" onClick={() => fileInput.current?.click()}>
+                <UploadCloud size={16} />{t('Chọn ảnh khác')}
+              </button>
+              <button type="button" className="gt-image-action gt-image-close" onClick={resetInput} aria-label={t('Xóa ảnh')} title={t('Xóa ảnh')}>
+                <X size={18} />
+              </button>
+              <input ref={fileInput} type="file" accept={IMAGE_TYPES} hidden onChange={(event) => { void handleImageFile(event.target.files?.[0]); event.target.value = ''; }} />
+            </div>
+            {!imageReady && !imageLoadError ? (
+              <div className="gt-image-loading" role="status" aria-live="polite">
+                <span className="gt-spinner" />
+                <span>{t('Đang tải ảnh...')}</span>
+              </div>
+            ) : imageLoadError ? (
+              <div className="gt-image-loading" role="status">
+                <span>{t('Không thể tải ảnh này. Vui lòng thử một tệp khác.')}</span>
+                <button type="button" className="gt-btn gt-btn-primary" onClick={() => fileInput.current?.click()}>{t('Chọn ảnh khác')}</button>
+              </div>
+            ) : (
+              <>
+                <div className="gt-image-panels">
+                  {showOriginalImage && (
+                    <div className="gt-image-panel">
+                      <div className="gt-image-panel-title">{t('Bản gốc')}</div>
+                      <div className="gt-image-frame">
+                        <img src={imageUrl} alt={`${t('Bản gốc')}: ${fileName}`} />
+                      </div>
+                    </div>
+                  )}
+                  <div className="gt-image-panel">
+                    <div className="gt-image-panel-title">{t('Ảnh đã dịch')} <span>{t('Bản xem trước')}</span></div>
+                    <div className="gt-image-frame">
+                      <img
+                        src={imageUrl}
+                        alt={`${t('Bản xem trước chưa dịch')}: ${fileName}`}
+                        onLoad={() => setImageReady(true)}
+                        onError={() => {
+                          setImageReady(false);
+                          setImageLoadError(true);
+                          setNotice(t('Không thể tải ảnh này. Vui lòng thử một tệp khác.'));
+                        }}
+                      />
+                    </div>
+                  </div>
+                </div>
+                <div className="gt-image-notice" role="status">
+                  {t('Dịch ảnh chưa khả dụng. Ảnh bên phải vẫn là bản gốc; đây chỉ là bản xem trước.')}
+                </div>
+              </>
+            )}
+          </section>
+        ) : dropzone(IMAGE_TYPES, '.jpg, .jpeg, .png, .webp')
+      )}
 
       {notice && (
         <div className="notice" role="status">
