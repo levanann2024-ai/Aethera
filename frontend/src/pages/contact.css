@@ -1,0 +1,10 @@
+.ct-page { display: grid; gap: 18px; max-width: 640px; margin: 0 auto; padding-bottom: 48px; align-content: start; }
+.ct-item { display: flex; align-items: center; gap: 20px; padding: 26px 28px; border: 1px solid #dfe8e2; border-radius: 22px; background: #fff; box-shadow: 0 8px 22px rgba(34,103,83,.07); color: inherit; text-decoration: none; transition: transform .18s ease, box-shadow .18s ease; }
+.ct-item:hover { transform: translateY(-3px); box-shadow: 0 14px 30px rgba(34,103,83,.13); }
+.ct-item-primary { border-color: transparent; background: #f3c644; }
+.ct-item-icon { display: grid; flex: none; place-items: center; width: 64px; height: 64px; border-radius: 18px; background: #e1f1e8; color: #14503f; }
+.ct-item-primary .ct-item-icon { background: #14503f; color: #fff; }
+.ct-item-text { display: grid; gap: 4px; min-width: 0; }
+.ct-item-text strong { color: #14503f; font-family: 'Plus Jakarta Sans', sans-serif; font-size: 20px; }
+.ct-item-primary .ct-item-text strong { color: #3a2f08; }
+.ct-item-text span { color: #4f6b62; font-size: 16px; overflow-wrap: anywhere; }
