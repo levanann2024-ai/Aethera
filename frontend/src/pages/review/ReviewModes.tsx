@@ -52,7 +52,7 @@ const modes: { id: ReviewMode; title: string; subtitle: string; description: str
   { id: 'listen', title: 'Luyện nghe bản địa', subtitle: 'Audio Practice', description: 'Nghe giọng đọc phát âm địa phương và chọn hoặc gõ đúng từ. Giúp rèn kỹ năng nghe.', Art: ListenArt },
 ];
 
-export function ReviewModes({ wordCount, usePinned, onPick, onBack }: { wordCount: number; usePinned: boolean; onPick: (mode: ReviewMode) => void; onBack: () => void }) {
+export function ReviewModes({ wordCount, usePinned, emptyMessage, onPick, onBack }: { wordCount: number; usePinned: boolean; emptyMessage: string; onPick: (mode: ReviewMode) => void; onBack: () => void }) {
   const { t } = useLanguage();
   return (
     <div className="rv-modes">
@@ -62,21 +62,18 @@ export function ReviewModes({ wordCount, usePinned, onPick, onBack }: { wordCoun
         {wordCount > 0 && <span className="rv-deck-note">{t(usePinned ? 'Ôn các từ bạn đã ghim' : 'Chưa ghim từ nào, ôn các từ trong sổ')} · {wordCount} {t('từ')}</span>}
       </header>
 
-      {wordCount === 0 ? (
-        <div className="rv-empty">{t('Sổ từ vựng chưa có từ nào để ôn.')}</div>
-      ) : (
-        <div className="rv-mode-grid">
-          {modes.map(({ id, title, subtitle, description, Art }) => (
-            <article key={id} className="rv-mode-card">
-              <div className="rv-mode-art"><Art /></div>
-              <h2>{t(title)}</h2>
-              <strong>{t(subtitle)}</strong>
-              <p>{t(description)}</p>
-              <button type="button" className="rv-primary" onClick={() => onPick(id)}>{t('Bắt đầu')}</button>
-            </article>
-          ))}
-        </div>
-      )}
+      {wordCount === 0 && <div className="rv-empty">{t(emptyMessage)}</div>}
+      <div className="rv-mode-grid">
+        {modes.map(({ id, title, subtitle, description, Art }) => (
+          <article key={id} className="rv-mode-card">
+            <div className="rv-mode-art"><Art /></div>
+            <h2>{t(title)}</h2>
+            <strong>{t(subtitle)}</strong>
+            <p>{t(description)}</p>
+            <button type="button" className="rv-primary" onClick={() => onPick(id)} disabled={wordCount === 0}>{t('Bắt đầu')}</button>
+          </article>
+        ))}
+      </div>
 
       <button type="button" className="rv-link" onClick={onBack}><ArrowLeft size={16} /> {t('Quay lại Sổ từ vựng')}</button>
     </div>

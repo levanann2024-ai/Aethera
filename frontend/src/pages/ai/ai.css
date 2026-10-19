@@ -27,6 +27,20 @@
 .aic-back { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 42px; padding: 0 16px; border: 1px solid #e2e0cf; border-radius: 12px; background: #fff; color: #14503f; font: inherit; font-size: 14px; font-weight: 700; cursor: pointer; }
 .aic-back:hover { border-color: #2f8f76; }
 .aic-note { margin: 8px 0 0; color: #8a978f; font-size: 11.5px; }
+.aic-audience-page { display: grid; align-content: start; gap: 24px; max-width: 1040px; min-height: calc(100vh - 72px); margin: 0 auto; padding: 24px clamp(16px, 4vw, 40px) 48px; }
+.aic-audience-form { display: grid; justify-items: center; gap: 22px; width: 100%; }
+.aic-audience-form h1 { margin: 8px 0; color: #14503f; font-family: 'Plus Jakarta Sans', sans-serif; font-size: clamp(26px, 4vw, 36px); line-height: 1.2; }
+.aic-audience-form > div:first-child p { margin: 0; color: #5f7a72; }
+.aic-audience-options { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; width: 100%; }
+.aic-audience-option { display: grid; align-content: start; gap: 6px; min-height: 88px; padding: 16px 18px; border: 2px solid #e6eadb; border-radius: 16px; background: #fffef9; color: #14503f; font: inherit; text-align: left; cursor: pointer; transition: border-color .15s ease, background .15s ease; }
+.aic-audience-option:hover { border-color: #9abdad; }
+.aic-audience-option-on { border-color: #0f7a62; background: #e6f4ec; box-shadow: 0 4px 12px rgba(15,122,98,.1); }
+.aic-audience-option strong { font-size: 15px; }
+.aic-audience-option span { color: #5f7a72; font-size: 13px; line-height: 1.45; }
+.aic-audience-custom { display: grid; gap: 8px; width: 100%; color: #14503f; font-size: 14px; font-weight: 700; }
+.aic-audience-custom input { min-height: 48px; padding: 0 14px; border: 1px solid #d8e6de; border-radius: 12px; outline-color: #0f7a62; background: #fff; color: #173c36; font: inherit; font-weight: 400; }
+.aic-audience-submit { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 50px; padding: 0 24px; border: 0; border-radius: 12px; background: #0f7a62; color: #fff; font: inherit; font-weight: 800; cursor: pointer; }
+.aic-audience-submit:disabled { opacity: .5; cursor: not-allowed; }
 @media (max-width: 900px) { .aic-cards { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 760px) {
   .aic-launch h1 { font-size: 30px; }
@@ -35,4 +49,6 @@
   .aic-card-icon { margin: 0 8px 0 0; width: 56px; height: 56px; }
   .aic-card strong { flex: 1; }
   .aic-card > span:last-child { flex: 1 1 100%; }
+  .aic-audience-options { grid-template-columns: 1fr; }
+  .aic-audience-option { min-height: 76px; }
 }

@@ -17,6 +17,7 @@ import { TranslatePage } from '@/pages/TranslatePage';
 import { VocabularyPage } from '@/pages/VocabularyPage';
 import { useLanguage } from '@/i18n/useLanguage';
 import { Footer } from '@/components/Footer';
+import { getSettings, saveSettings } from '@/services/settings';
 import type { User } from '@/types/auth';
 import type { Page, Route } from '@/types/navigation';
 
@@ -48,6 +49,12 @@ function activePageForRoute(route: Route): Page | undefined {
   return activePageByRoute[route] ?? pageIds.find((id) => id === route);
 }
 
+function applyAccountLanguage(account: User | null) {
+  if (account?.targetLanguage === 'tay' || account?.targetLanguage === 'muong') {
+    saveSettings({ ...getSettings(), defaultLanguage: account.targetLanguage });
+  }
+}
+
 function App() {
   const { t } = useLanguage();
   const [route, setRoute] = useState<Route>(() => routeFromPath(window.location.pathname));
@@ -64,7 +71,13 @@ function App() {
   };
   useEffect(() => {
     getCurrentUser()
-      .then(setUser)
+      .then((currentUser) => {
+        setUser(currentUser);
+        applyAccountLanguage(currentUser);
+      })
+      .catch((error: unknown) => {
+        console.error('Unable to restore the authenticated session.', error);
+      })
       .finally(() => setAuthLoading(false));
   }, []);
 
@@ -90,7 +103,13 @@ function App() {
 
   const handleAuthenticated = (authenticatedUser: User) => {
     setUser(authenticatedUser);
+    applyAccountLanguage(authenticatedUser);
     navigate('home');
+  };
+
+  const handleUserUpdated = (updatedUser: User) => {
+    setUser(updatedUser);
+    applyAccountLanguage(updatedUser);
   };
 
   if (authLoading) {
@@ -126,13 +145,13 @@ function App() {
           {route === 'cultural-map' && <Interactivemap />}
           {route === 'vocabulary' && <VocabularyPage user={user} />}
           {route === 'contact' && <ContactPage />}
-          {route === 'practice' && <PracticePage onNavigate={navigate} />}
+          {route === 'practice' && <PracticePage onNavigate={navigate} user={user} />}
           {route === 'history' && <HistoryPage onNavigate={navigate} user={user} />}
           {route === 'news' && <NewsPage />}
           {route === 'profile' && (
             <ProfilePage user={user} onNavigate={navigate} onSignOut={handleSignOut} />
           )}
-          {route === 'settings' && <SettingsPage user={user} onNavigate={navigate} onSignOut={handleSignOut} />}
+          {route === 'settings' && <SettingsPage user={user} onNavigate={navigate} onSignOut={handleSignOut} onUserUpdated={handleUserUpdated} />}
           {route === 'not-found' && <NotFoundPage onNavigate={navigate} />}
         </main>
         <Footer />

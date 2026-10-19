@@ -23,7 +23,11 @@ const statusFilters: { id: StatusFilter; label: string }[] = [
 export function VocabularyPage({ user }: { user: User | null }) {
   const { t } = useLanguage();
   const { pinned, learned, setPinned, setLearned } = useVocabularyProgress();
-  const [language, setLanguage] = useState<SourceLanguage>(() => getSettings().defaultLanguage);
+  const [language, setLanguage] = useState<SourceLanguage>(() => (
+    user?.targetLanguage === 'tay' || user?.targetLanguage === 'muong'
+      ? user.targetLanguage
+      : getSettings().defaultLanguage
+  ));
   const [query, setQuery] = useState('');
   const [status, setStatus] = useState<StatusFilter>('all');
   const [entries, setEntries] = useState<DictionaryEntry[]>([]);

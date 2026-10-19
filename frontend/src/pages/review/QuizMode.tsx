@@ -78,13 +78,24 @@ export function QuizMode({ initialDeck, pool, onModes, onBack }: Props) {
         })}
       </div>
 
-      <div className={`rv-feedback ${selected === null ? '' : isCorrect ? 'rv-feedback-right' : 'rv-feedback-miss'}`} aria-live="polite">
-        {selected !== null && (
-          <>
-            <strong>{t(isCorrect ? 'Chính xác!' : 'Gần đúng rồi, bạn nhớ nghĩa này nhé.')}</strong>
-            <button type="button" className="rv-primary" onClick={advance}>{t(last ? 'Xem kết quả' : 'Tiếp tục')}</button>
-          </>
-        )}
+      <div 
+        className={`rv-feedback ${selected === null ? 'rv-feedback-hidden' : isCorrect ? 'rv-feedback-right' : 'rv-feedback-miss'}`} 
+        aria-live="polite"
+      >
+        <strong>
+          {selected === null 
+            ? '\u00A0' 
+            : t(isCorrect ? 'Chính xác!' : 'Gần đúng rồi, bạn nhớ nghĩa này nhé.')}
+        </strong>
+        
+        <button 
+          type="button" 
+          className="rv-primary" 
+          onClick={advance}
+          disabled={selected === null}
+        >
+          {t(last ? 'Xem kết quả' : 'Tiếp tục')}
+        </button>
       </div>
     </ReviewShell>
   );

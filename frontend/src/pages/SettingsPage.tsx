@@ -1,11 +1,12 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { Database, Download, Info, LogIn, LogOut, Trash2, UserRound, Volume2, Palette } from 'lucide-react';
 import { clearStudyHistory, getStudyHistory } from '@/services/study-history';
+import { savePreferredLanguage } from '@/services/api';
 import { getSettings, saveSettings } from '@/services/settings';
 import type { Settings } from '@/services/settings';
 import { useLanguage } from '@/i18n/useLanguage';
-import type { User } from '@/types/auth';
+import type { TargetLanguage, User } from '@/types/auth';
 import type { Route } from '@/types/navigation';
 import { speakText } from './review/reviewUtils';
 import './settings.css';
@@ -14,9 +15,11 @@ type SettingsPageProps = {
   user: User | null;
   onNavigate: (route: Route) => void;
   onSignOut: () => void;
+  onUserUpdated: (user: User) => void;
 };
 
 type Choice<T extends string> = { value: T; label: string };
+type SettingsNotice = { message: string; type: 'success' | 'error' };
 
 const KEYS = {
   activity: 'aethera.activity',
@@ -59,16 +62,50 @@ function Row({ title, hint, children }: { title: string; hint?: string; children
   );
 }
 
-export function SettingsPage({ user, onNavigate, onSignOut }: SettingsPageProps) {
+export function SettingsPage({ user, onNavigate, onSignOut, onUserUpdated }: SettingsPageProps) {
   const { language, setLanguage, t } = useLanguage();
   const [settings, setSettings] = useState<Settings>(getSettings);
   const [version, setVersion] = useState(0);
-  const [notice, setNotice] = useState('');
+  const [notice, setNotice] = useState<SettingsNotice | null>(null);
+  const languageUpdateInProgress = useRef(false);
+
+  useEffect(() => {
+    if (!notice) return;
+    const timeoutId = window.setTimeout(() => setNotice(null), 4000);
+    return () => window.clearTimeout(timeoutId);
+  }, [notice]);
 
   const update = (patch: Partial<Settings>) => {
     const next = { ...settings, ...patch };
     setSettings(next);
     saveSettings(next);
+  };
+
+  const changeLearningLanguage = async (targetLanguage: TargetLanguage) => {
+    if (languageUpdateInProgress.current) return;
+    if (!user) {
+      if (targetLanguage === 'tay' || targetLanguage === 'muong') {
+        update({ defaultLanguage: targetLanguage });
+      }
+      return;
+    }
+
+    languageUpdateInProgress.current = true;
+    try {
+      const updatedUser = await savePreferredLanguage(targetLanguage);
+      if (targetLanguage === 'tay' || targetLanguage === 'muong') {
+        update({ defaultLanguage: targetLanguage });
+      }
+      onUserUpdated(updatedUser);
+      setNotice({ message: t('Đã cập nhật ngôn ngữ học cho tài khoản của bạn.'), type: 'success' });
+    } catch (error) {
+      setNotice({
+        message: error instanceof Error ? t(error.message) : t('Không thể cập nhật ngôn ngữ học.'),
+        type: 'error',
+      });
+    } finally {
+      languageUpdateInProgress.current = false;
+    }
   };
 
   const lookupCount = (() => {
@@ -91,7 +128,7 @@ export function SettingsPage({ user, onNavigate, onSignOut }: SettingsPageProps)
     if (!window.confirm(`${t('Xóa')} "${t(row.title)}"? ${t('Thao tác này không thể hoàn tác.')}`)) return;
     row.clear();
     setVersion((current) => current + 1);
-    setNotice(`${t('Đã xóa')}: ${t(row.title)}.`);
+    setNotice({ message: `${t('Đã xóa')}: ${t(row.title)}.`, type: 'success' });
   };
 
   const exportData = () => {
@@ -114,7 +151,7 @@ export function SettingsPage({ user, onNavigate, onSignOut }: SettingsPageProps)
     link.download = 'aethera-du-lieu.json';
     link.click();
     URL.revokeObjectURL(url);
-    setNotice(t('Đã tạo file dữ liệu của bạn.'));
+    setNotice({ message: t('Đã tạo file dữ liệu của bạn.'), type: 'success' });
   };
 
   return (
@@ -124,7 +161,12 @@ export function SettingsPage({ user, onNavigate, onSignOut }: SettingsPageProps)
         <p>{t('Tùy chỉnh Aethera cho thoải mái và dễ dùng với bạn.')}</p>
       </header>
 
-      {notice && <div className="st-notice" role="status">{notice}</div>}
+      {notice && (
+        <div className={`st-toast st-toast-${notice.type}`} role={notice.type === 'error' ? 'alert' : 'status'}>
+          <span>{notice.message}</span>
+          <button type="button" onClick={() => setNotice(null)} aria-label={t('Đóng thông báo')}>×</button>
+        </div>
+      )}
 
       <section className="st-card">
         <h2><UserRound size={20} /> {t('Tài khoản')}</h2>
@@ -149,8 +191,21 @@ export function SettingsPage({ user, onNavigate, onSignOut }: SettingsPageProps)
         <Row title={t('Ngôn ngữ giao diện')} hint={t('Áp dụng cho toàn bộ giao diện.')}>
           <Segmented label={t('Ngôn ngữ giao diện')} value={language} onChange={setLanguage} options={[{ value: 'vi', label: 'Tiếng Việt' }, { value: 'en', label: 'English' }]} />
         </Row>
-        <Row title={t('Ngôn ngữ học mặc định')} hint={t('Trang Dịch và Từ vựng sẽ mở sẵn ngôn ngữ này.')}>
-          <Segmented label={t('Ngôn ngữ học mặc định')} value={settings.defaultLanguage} onChange={(defaultLanguage) => update({ defaultLanguage })} options={[{ value: 'tay', label: 'Tày' }, { value: 'muong', label: 'Mường' }]} />
+        <Row title={t(user ? 'Ngôn ngữ muốn học' : 'Ngôn ngữ học mặc định')} hint={t(user ? 'Được lưu vào tài khoản và dùng cho trang Ôn tập.' : 'Trang Dịch và Từ vựng sẽ mở sẵn ngôn ngữ này.')}>
+          <Segmented
+            label={t('Ngôn ngữ muốn học')}
+            value={user?.targetLanguage ?? settings.defaultLanguage}
+            onChange={(targetLanguage) => void changeLearningLanguage(targetLanguage)}
+            options={user
+              ? [
+                { value: 'tay', label: 'Tày' },
+                { value: 'muong', label: 'Mường' },
+                { value: 'hmong', label: "H'Mông" },
+                { value: 'dao', label: 'Dao' },
+                { value: 'all', label: t('Tất cả') },
+              ]
+              : [{ value: 'tay', label: 'Tày' }, { value: 'muong', label: 'Mường' }]}
+          />
         </Row>
         <Row title={t('Cỡ chữ nội dung')} hint={t('Phóng to phần nội dung cho dễ đọc.')}>
           <Segmented label={t('Cỡ chữ nội dung')} value={settings.textScale} onChange={(textScale) => update({ textScale })} options={[{ value: 'normal', label: t('Vừa') }, { value: 'large', label: t('Lớn') }, { value: 'xlarge', label: t('Rất lớn') }]} />
@@ -165,7 +220,7 @@ export function SettingsPage({ user, onNavigate, onSignOut }: SettingsPageProps)
         <Row title={t('Tốc độ đọc')} hint={t('Dùng cho mọi nút nghe trong ứng dụng.')}>
           <Segmented label={t('Tốc độ đọc')} value={settings.voiceSpeed} onChange={(voiceSpeed) => update({ voiceSpeed })} options={[{ value: 'slow', label: t('Chậm') }, { value: 'normal', label: t('Vừa') }, { value: 'fast', label: t('Nhanh') }]} />
         </Row>
-        <button type="button" className="st-ghost st-test" onClick={() => { if (!speakText('Xin chào, mình là Aethera.')) setNotice(t('Trình duyệt chưa hỗ trợ đọc thành tiếng.')); }}><Volume2 size={16} /> {t('Nghe thử')}</button>
+        <button type="button" className="st-ghost st-test" onClick={() => { if (!speakText('Xin chào, mình là Aethera.')) setNotice({ message: t('Trình duyệt chưa hỗ trợ đọc thành tiếng.'), type: 'error' }); }}><Volume2 size={16} /> {t('Nghe thử')}</button>
       </section>
 
       <section className="st-card">

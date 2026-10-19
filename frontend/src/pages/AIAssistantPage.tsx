@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { FormEvent } from 'react';
 import { ArrowLeft, ArrowUpRight, Sparkles } from 'lucide-react';
 import { useLanguage } from '@/i18n/useLanguage';
+import type { ChatAudience, ChatAudienceId } from '@/services/api';
 import { aiModes } from './ai/aiModes';
 import type { AiModeId } from './ai/aiModes';
 import { ChatMode } from './ai/ChatMode';
@@ -13,9 +14,23 @@ import { SubtitleTool } from './ai/SubtitleTool';
 import './ai/ai.css';
 import './ai/aiTools.css';
 
+const AUDIENCE_OPTIONS: Array<{ id: ChatAudienceId; title: string; description: string }> = [
+  { id: 'primary', title: 'Học sinh Tiểu học', description: 'Giải thích thật đơn giản, ngắn gọn và gần gũi.' },
+  { id: 'middle', title: 'Học sinh THCS', description: 'Cân bằng giữa giải thích rõ ràng và ví dụ thực tế.' },
+  { id: 'high', title: 'Học sinh THPT', description: 'Có thể đi sâu hơn vào ngữ pháp và sắc thái từ.' },
+  { id: 'community', title: 'Người dân địa phương / người lớn', description: 'Tập trung vào giao tiếp, kinh nghiệm và văn hóa địa phương.' },
+  { id: 'educator', title: 'Giáo viên / cán bộ văn hóa / người dạy tiếng', description: 'Thêm gợi ý giải thích, giảng dạy và bảo tồn tiếng dân tộc.' },
+];
+
+type AudienceChoice = ChatAudienceId | 'custom';
+
 export function AIAssistantPage() {
   const { t } = useLanguage();
   const [mode, setMode] = useState<AiModeId | null>(null);
+  const [audienceStep, setAudienceStep] = useState(false);
+  const [audienceChoice, setAudienceChoice] = useState<AudienceChoice | null>(null);
+  const [customAudience, setCustomAudience] = useState('');
+  const [selectedAudience, setSelectedAudience] = useState<ChatAudience | null>(null);
   const [question, setQuestion] = useState('');
   const [seed, setSeed] = useState('');
 
@@ -29,12 +44,102 @@ export function AIAssistantPage() {
     const text = question.trim();
     if (!text) return;
     setQuestion('');
-    open('chat', text);
+    setSeed(text);
+    setAudienceStep(true);
+  };
+
+  const startChat = (event: FormEvent) => {
+    event.preventDefault();
+    if (!audienceChoice) return;
+    const audience: ChatAudience = audienceChoice === 'custom'
+      ? { type: 'custom', description: customAudience.trim() }
+      : { type: 'preset', id: audienceChoice };
+    if (audience.type === 'custom' && !audience.description) return;
+    setSelectedAudience(audience);
+    setAudienceStep(false);
+    setMode('chat');
   };
 
   const active = aiModes.find((item) => item.id === mode);
 
-  if (mode === 'chat') return <ChatMode initialText={seed} onBack={() => setMode(null)} />;
+  if (mode === 'chat' && selectedAudience) {
+    return (
+      <ChatMode
+        initialText={seed}
+        initialAudience={selectedAudience}
+        onBack={() => {
+          setMode(null);
+          setAudienceStep(true);
+          setSeed('');
+        }}
+      />
+    );
+  }
+
+  if (audienceStep) {
+    return (
+      <div className="aic-audience-page">
+        <button type="button" className="aic-back" onClick={() => { setAudienceStep(false); setSeed(''); }}>
+          <ArrowLeft size={16} /> {t('Quay lại')}
+        </button>
+        <form className="aic-audience-form" onSubmit={startChat}>
+          <div className="text-center space-y-2">
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-[#14503F]/10 text-[#14503F] text-xs font-semibold">
+              <Sparkles size={14} /> {t('TRỢ LÝ THÔNG MINH AETHERA')}
+            </div>
+            <h1>{t('Bạn muốn AI trò chuyện với đối tượng nào?')}</h1>
+            <p>{t('Mình sẽ điều chỉnh cách giải thích và độ dài câu trả lời cho phù hợp.')}</p>
+          </div>
+
+          <div className="aic-audience-options" role="group" aria-label={t('Chọn đối tượng')}>
+            {AUDIENCE_OPTIONS.map((option) => (
+              <button
+                key={option.id}
+                type="button"
+                className={`aic-audience-option${audienceChoice === option.id ? ' aic-audience-option-on' : ''}`}
+                aria-pressed={audienceChoice === option.id}
+                onClick={() => setAudienceChoice(option.id)}
+              >
+                <strong>{t(option.title)}</strong>
+                <span>{t(option.description)}</span>
+              </button>
+            ))}
+            <button
+              type="button"
+              className={`aic-audience-option${audienceChoice === 'custom' ? ' aic-audience-option-on' : ''}`}
+              aria-pressed={audienceChoice === 'custom'}
+              onClick={() => setAudienceChoice('custom')}
+            >
+              <strong>{t('Đối tượng khác')}</strong>
+              <span>{t('Tự mô tả để AI linh hoạt điều chỉnh cách trả lời.')}</span>
+            </button>
+          </div>
+
+          {audienceChoice === 'custom' && (
+            <label className="aic-audience-custom">
+              <span>{t('Mô tả đối tượng')}</span>
+              <input
+                autoFocus
+                value={customAudience}
+                onChange={(event) => setCustomAudience(event.target.value)}
+                placeholder={t('Ví dụ: người mới bắt đầu học tiếng Tày...')}
+                maxLength={120}
+                required
+              />
+            </label>
+          )}
+
+          <button
+            type="submit"
+            className="aic-audience-submit"
+            disabled={!audienceChoice || (audienceChoice === 'custom' && !customAudience.trim())}
+          >
+            {t('Bắt đầu trò chuyện')} <ArrowUpRight size={18} />
+          </button>
+        </form>
+      </div>
+    );
+  }
 
   if (!active) {
     return (
@@ -60,7 +165,14 @@ export function AIAssistantPage() {
               key={id} 
               type="button" 
               className={`aic-card aic-card-${tone} p-8 flex flex-col items-center text-center`} 
-              onClick={() => open(id)}
+              onClick={() => {
+                if (id === 'chat') {
+                  setSeed('');
+                  setAudienceStep(true);
+                  return;
+                }
+                open(id);
+              }}
             >
               <span className="aic-card-icon mb-4">
                 <Icon size={52} strokeWidth={1.8} />

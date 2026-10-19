@@ -1,7 +1,11 @@
 .st-page { display: grid; gap: 18px; max-width: 820px; margin: 0 auto; padding-bottom: 48px; align-content: start; }
 .st-head h1 { margin: 0 0 8px; color: #14503f; font-family: 'Plus Jakarta Sans', sans-serif; font-size: 38px; line-height: 1.1; letter-spacing: -.02em; }
 .st-head p { margin: 0; color: #5f7a72; font-size: 15px; }
-.st-notice { padding: 12px 16px; border-radius: 12px; background: #e6f4ec; color: #14503f; font-size: 14px; }
+.st-toast { position: fixed; z-index: 1000; right: 24px; bottom: 24px; display: flex; align-items: center; gap: 14px; width: min(420px, calc(100vw - 32px)); padding: 14px 16px; border: 1px solid #c8e5d5; border-radius: 14px; background: #f0faf4; color: #14503f; box-shadow: 0 12px 32px rgba(23,60,54,.16); font-size: 14px; line-height: 1.5; animation: st-toast-enter .2s ease-out; }
+.st-toast-error { border-color: #efc8c1; background: #fff5f2; color: #9b3828; }
+.st-toast button { flex: none; width: 28px; height: 28px; padding: 0; border: 0; border-radius: 50%; background: transparent; color: inherit; font: inherit; font-size: 22px; line-height: 1; cursor: pointer; }
+.st-toast button:hover { background: rgba(20,80,63,.08); }
+@keyframes st-toast-enter { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
 
 .st-card { display: grid; gap: 14px; padding: 22px 24px; border: 1px solid #ebf0e4; border-radius: 22px; background: #fffef9; }
 .st-card h2 { display: flex; align-items: center; gap: 10px; margin: 0; color: #14503f; font-family: 'Plus Jakarta Sans', sans-serif; font-size: 18px; }
@@ -47,4 +51,5 @@
   .st-row { flex-direction: column; align-items: flex-start; }
   .st-account { grid-template-columns: auto minmax(0, 1fr); }
   .st-account button { grid-column: 1 / -1; }
+  .st-toast { right: 12px; bottom: 12px; }
 }

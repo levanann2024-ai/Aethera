@@ -78,7 +78,11 @@ export function TranslatePage({ user, onNavigate }: { onNavigate?: (route: Route
   const { t } = useLanguage();
   const [kind, setKind] = useState<InputKind>('text');
   const [sourceText, setSourceText] = useState('');
-  const [sourceLanguage, setSourceLanguage] = useState<SourceLanguage>(() => getSettings().defaultLanguage);
+  const [sourceLanguage, setSourceLanguage] = useState<SourceLanguage>(() => (
+    user?.targetLanguage === 'tay' || user?.targetLanguage === 'muong'
+      ? user.targetLanguage
+      : getSettings().defaultLanguage
+  ));
   const [reverseDirection, setReverseDirection] = useState(false);
   const [lookup, setLookup] = useState<PhraseLookup | null>(null);
   const [translatedText, setTranslatedText] = useState('');

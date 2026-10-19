@@ -13,6 +13,7 @@
 .aic-bar { display: flex; align-items: center; gap: 12px; padding: 10px 24px; border-bottom: 1px solid #ece8d6; }
 .aic-bar small { color: #7a8a80; font-size: 11px; font-weight: 800; letter-spacing: .06em; }
 .aic-bar h1 { margin: 2px 0 0; color: #14503f; font-family: 'Plus Jakarta Sans', sans-serif; font-size: 19px; }
+.aic-audience-badge { display: inline-block; margin-top: 4px; padding: 2px 8px; border-radius: 999px; background: #e6f4ec; color: #2d6b58; font-size: 11px; font-weight: 700; }
 .aic-square { display: inline-flex; align-items: center; justify-content: center; width: 42px; min-height: 42px; border: 1px solid #e2e0cf; border-radius: 12px; background: #fff; color: #14503f; cursor: pointer; }
 .aic-square:hover { border-color: #2f8f76; }
 .aic-thread { display: flex; flex: 1; flex-direction: column; gap: 16px; min-height: 0; padding: 24px; overflow-y: auto; }
@@ -25,6 +26,20 @@
 .aic-bubble { position: relative; padding: 14px 18px; border-radius: 14px; background: #e6f2ea; color: #173c36; font-size: 14.5px; line-height: 1.6; }
 .aic-msg-user .aic-bubble { background: #dcecde; }
 .aic-bubble p { margin: 0; white-space: pre-line; }
+.aic-bubble .aic-markdown { overflow-wrap: anywhere; }
+.aic-markdown > :first-child { margin-top: 0; }
+.aic-markdown > :last-child { margin-bottom: 0; }
+.aic-markdown p { margin: 0 0 10px; white-space: pre-wrap; }
+.aic-markdown h1, .aic-markdown h2, .aic-markdown h3, .aic-markdown h4 { margin: 14px 0 8px; color: #14503f; font-size: 1em; font-weight: 800; line-height: 1.4; }
+.aic-markdown ul, .aic-markdown ol { margin: 6px 0 12px; padding-left: 22px; }
+.aic-markdown li { padding-left: 2px; }
+.aic-markdown li + li { margin-top: 4px; }
+.aic-markdown blockquote { margin: 10px 0; padding-left: 12px; border-left: 3px solid #9abdad; color: #49675c; }
+.aic-markdown hr { margin: 12px 0; border: 0; border-top: 1px solid #c9ddd1; }
+.aic-markdown :not(pre) > code { padding: 2px 5px; border-radius: 4px; background: #d8e9de; font-size: .92em; }
+.aic-markdown pre { max-width: 100%; padding: 10px 12px; overflow-x: auto; border-radius: 8px; background: #d8e9de; }
+.aic-markdown pre code { white-space: pre; }
+.aic-markdown a { color: #0f7a62; text-decoration: underline; }
 .aic-speak { display: inline-flex; justify-content: flex-end; width: 100%; margin-top: 6px; padding: 0; border: 0; background: transparent; color: #6a8a7e; cursor: pointer; }
 .aic-speak:hover { color: #14503f; }
 .aic-chips { display: flex; flex-wrap: wrap; gap: 8px; padding-left: 48px; }

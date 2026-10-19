@@ -1,4 +1,4 @@
-import type { User } from '@/types/auth';
+import type { TargetLanguage, User } from '@/types/auth';
 import type { DictionaryEntry, DictionaryMeaning, PhraseLookup, SourceLanguage } from '@/types/dictionary';
 import { mainDictionary } from '@/data/mainDictionary';
 import { sampleDictionaryEntries } from '@/data/sampleDictionary';
@@ -12,6 +12,13 @@ export interface TextTranslation {
 }
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '/api';
+
+export type ChatLanguage = 'tay' | 'muong' | 'thai' | 'hmong' | 'dao' | 'all';
+export type ChatHistoryMessage = { role: 'user' | 'model'; text: string };
+export type ChatAudienceId = 'primary' | 'middle' | 'high' | 'community' | 'educator';
+export type ChatAudience =
+  | { type: 'preset'; id: ChatAudienceId }
+  | { type: 'custom'; description: string };
 
 interface TayApiTranslationResponse {
   exact?: Array<{ source?: string; target?: string }>;
@@ -160,6 +167,109 @@ const TAY_API_URL = import.meta.env.VITE_TAY_API_URL || 'https://admin.taynung.c
 let dictionaryEntries = [...sampleDictionaryEntries];
 let activeUser: User | null = null;
 let nextEntryId = 1;
+const AUTH_TOKEN_KEY = 'aethera.auth.token';
+
+interface CaptchaChallenge {
+  captchaToken: string;
+  question: string;
+}
+
+interface AuthResponse {
+  token: string;
+  user: {
+    id: string;
+    email: string;
+    full_name: string;
+    target_language: TargetLanguage;
+  };
+}
+
+function isTargetLanguage(value: unknown): value is TargetLanguage {
+  return value === 'tay' || value === 'muong' || value === 'hmong' || value === 'dao' || value === 'all';
+}
+
+function parseAuthResponse(value: unknown): AuthResponse {
+  if (typeof value !== 'object' || value === null) {
+    throw new Error('Authentication API returned an invalid response.');
+  }
+  const response = value as Record<string, unknown>;
+  const user = response.user;
+  if (
+    typeof response.token !== 'string'
+    || typeof user !== 'object'
+    || user === null
+  ) {
+    throw new Error('Authentication API returned an invalid response.');
+  }
+  const userRecord = user as Record<string, unknown>;
+  if (
+    (typeof userRecord.id !== 'string' && typeof userRecord.id !== 'number')
+    || typeof userRecord.email !== 'string'
+    || typeof userRecord.full_name !== 'string'
+    || !isTargetLanguage(userRecord.target_language)
+  ) {
+    throw new Error('Authentication API returned an invalid user.');
+  }
+  return {
+    token: response.token,
+    user: {
+      id: String(userRecord.id),
+      email: userRecord.email,
+      full_name: userRecord.full_name,
+      target_language: userRecord.target_language,
+    },
+  };
+}
+
+function toFrontendUser(user: AuthResponse['user']): User {
+  return {
+    id: user.id,
+    email: user.email,
+    name: user.full_name,
+    targetLanguage: user.target_language,
+    preferredLanguage: user.target_language,
+  };
+}
+
+async function responseError(response: Response, fallback: string): Promise<Error> {
+  const payload: unknown = await response.json();
+  if (
+    typeof payload === 'object'
+    && payload !== null
+    && 'error' in payload
+    && typeof payload.error === 'string'
+  ) {
+    return new Error(payload.error);
+  }
+  return new Error(fallback);
+}
+
+function saveAuthenticatedSession(response: AuthResponse): User {
+  try {
+    localStorage.setItem(AUTH_TOKEN_KEY, response.token);
+  } catch {
+    throw new Error('Không thể lưu phiên đăng nhập trên trình duyệt này.');
+  }
+  activeUser = toFrontendUser(response.user);
+  return { ...activeUser };
+}
+
+export async function requestCaptcha(): Promise<CaptchaChallenge> {
+  const response = await fetch(`${API_BASE_URL}/auth/captcha`);
+  if (!response.ok) throw await responseError(response, 'Không thể tạo CAPTCHA.');
+  const challenge: unknown = await response.json();
+  if (
+    typeof challenge !== 'object'
+    || challenge === null
+    || !('captchaToken' in challenge)
+    || typeof challenge.captchaToken !== 'string'
+    || !('question' in challenge)
+    || typeof challenge.question !== 'string'
+  ) {
+    throw new Error('CAPTCHA API returned an invalid challenge.');
+  }
+  return { captchaToken: challenge.captchaToken, question: challenge.question };
+}
 
 // Helper function to create an empty PhraseLookup result
 function emptyPhraseLookup(language: SourceLanguage): PhraseLookup {
@@ -172,48 +282,126 @@ function emptyPhraseLookup(language: SourceLanguage): PhraseLookup {
   };
 }
 
-function createMockUser(email: string, name: string): User {
-  return {
-    id: `demo-${email.trim().toLowerCase()}`,
-    email: email.trim(),
-    name: name.trim(),
-    preferredLanguage: 'vi',
-  };
-}
-
 function requireSignedInUser(): User {
   if (!activeUser) throw new Error('Vui lòng đăng nhập để tiếp tục.');
   return activeUser;
 }
 
-export async function registerAccount(name: string, email: string, password: string): Promise<User> {
-  if (!name.trim() || !email.trim() || !password) throw new Error('Không thể tạo tài khoản.');
-  activeUser = createMockUser(email, name);
-  return { ...activeUser };
+export async function registerAccount(
+  fullName: string,
+  email: string,
+  password: string,
+  targetLanguage: TargetLanguage,
+  captchaToken: string,
+  captchaAnswer: string,
+): Promise<User> {
+  const response = await fetch(`${API_BASE_URL}/auth/register`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      full_name: fullName,
+      email,
+      password,
+      target_language: targetLanguage,
+      captchaToken: `${captchaToken}.${captchaAnswer}`,
+    }),
+  });
+  if (!response.ok) throw await responseError(response, 'Không thể tạo tài khoản.');
+  return saveAuthenticatedSession(parseAuthResponse(await response.json()));
 }
 
 export async function loginAccount(email: string, password: string): Promise<User> {
   if (!email.trim() || !password) throw new Error('Email hoặc mật khẩu chưa đúng.');
-  const name = email.trim().split('@')[0] || 'Người học demo';
-  activeUser = createMockUser(email, name);
-  return { ...activeUser };
+  const response = await fetch(`${API_BASE_URL}/auth/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ email, password }),
+  });
+  if (!response.ok) throw await responseError(response, 'Email hoặc mật khẩu chưa đúng.');
+  return saveAuthenticatedSession(parseAuthResponse(await response.json()));
 }
 
 export async function getCurrentUser(): Promise<User | null> {
-  return activeUser ? { ...activeUser } : null;
+  const token = localStorage.getItem(AUTH_TOKEN_KEY);
+  if (!token) {
+    activeUser = null;
+    return null;
+  }
+  const response = await fetch(`${API_BASE_URL}/auth/me`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (response.status === 401) {
+    localStorage.removeItem(AUTH_TOKEN_KEY);
+    activeUser = null;
+    return null;
+  }
+  if (!response.ok) throw await responseError(response, 'Không thể xác minh phiên đăng nhập.');
+  const payload: unknown = await response.json();
+  if (typeof payload !== 'object' || payload === null || !('user' in payload)) {
+    throw new Error('Authentication API returned an invalid user response.');
+  }
+  const parsed = parseAuthResponse({ token, user: payload.user });
+  activeUser = toFrontendUser(parsed.user);
+  return { ...activeUser };
 }
 
 export async function logoutAccount(): Promise<void> {
+  localStorage.removeItem(AUTH_TOKEN_KEY);
   activeUser = null;
 }
 
-export async function savePreferredLanguage(preferredLanguage: string): Promise<User> {
-  activeUser = { ...requireSignedInUser(), preferredLanguage };
+export async function savePreferredLanguage(preferredLanguage: TargetLanguage): Promise<User> {
+  requireSignedInUser();
+  const token = localStorage.getItem(AUTH_TOKEN_KEY);
+  if (!token) throw new Error('Vui lòng đăng nhập lại để đổi ngôn ngữ học.');
+
+  const response = await fetch(`${API_BASE_URL}/auth/me`, {
+    method: 'PATCH',
+    headers: {
+      Authorization: `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({ target_language: preferredLanguage }),
+  });
+  if (!response.ok) throw await responseError(response, 'Không thể cập nhật ngôn ngữ học.');
+
+  const payload: unknown = await response.json();
+  if (typeof payload !== 'object' || payload === null || !('user' in payload)) {
+    throw new Error('Authentication API returned an invalid user response.');
+  }
+  const updatedUser = parseAuthResponse({ token, user: payload.user }).user;
+  activeUser = toFrontendUser(updatedUser);
   return { ...activeUser };
 }
 
 export async function searchDictionary(language: SourceLanguage, query = ''): Promise<DictionaryEntry[]> {
   return fetchDictionaryEntries(language, query.trim());
+}
+
+export async function sendAIChat(
+  message: string,
+  language: ChatLanguage,
+  audience: ChatAudience,
+  history: ChatHistoryMessage[],
+): Promise<string> {
+  const response = await fetch(`${API_BASE_URL}/ai/chat`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ message, language, audience, history }),
+  });
+  if (!response.ok) throw await responseError(response, 'Không thể gửi câu hỏi đến AI.');
+
+  const payload: unknown = await response.json();
+  if (
+    typeof payload !== 'object'
+    || payload === null
+    || !('response' in payload)
+    || typeof payload.response !== 'string'
+    || !payload.response.trim()
+  ) {
+    throw new Error('AI API returned an invalid response.');
+  }
+  return payload.response.trim();
 }
 
 // ==========================================

@@ -1,9 +1,9 @@
-import { useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
-import { AlertCircle, ArrowRight, Eye, EyeOff, Lock, Mail, UserRound } from 'lucide-react';
-import { loginAccount, registerAccount } from '@/services/api';
+import { AlertCircle, ArrowRight, Eye, EyeOff, Lock, Mail, RefreshCw, UserRound } from 'lucide-react';
+import { loginAccount, registerAccount, requestCaptcha } from '@/services/api';
 import { useLanguage } from '@/i18n/useLanguage';
-import type { User } from '@/types/auth';
+import type { TargetLanguage, User } from '@/types/auth';
 import type { Route } from '@/types/navigation';
 import './auth.css';
 
@@ -30,10 +30,37 @@ export function AuthPage({ mode, onNavigate, onAuthenticated }: AuthPageProps) {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [name, setName] = useState('');
+  const [targetLanguage, setTargetLanguage] = useState<TargetLanguage>('tay');
+  const [captchaToken, setCaptchaToken] = useState('');
+  const [captchaQuestion, setCaptchaQuestion] = useState('');
+  const [captchaAnswer, setCaptchaAnswer] = useState('');
+  const [captchaLoading, setCaptchaLoading] = useState(false);
+  const [captchaError, setCaptchaError] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState('');
   const [error, setError] = useState('');
+
+  const loadCaptcha = useCallback(async () => {
+    setCaptchaLoading(true);
+    setCaptchaError('');
+    setCaptchaAnswer('');
+    try {
+      const challenge = await requestCaptcha();
+      setCaptchaToken(challenge.captchaToken);
+      setCaptchaQuestion(challenge.question);
+    } catch (requestError) {
+      setCaptchaToken('');
+      setCaptchaQuestion('');
+      setCaptchaError(requestError instanceof Error ? requestError.message : 'Không thể tải CAPTCHA.');
+    } finally {
+      setCaptchaLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!isLogin) void loadCaptcha();
+  }, [isLogin, loadCaptcha]);
 
   const submit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
@@ -43,10 +70,11 @@ export function AuthPage({ mode, onNavigate, onAuthenticated }: AuthPageProps) {
     try {
       const user = isLogin
         ? await loginAccount(email, password)
-        : await registerAccount(name, email, password);
+        : await registerAccount(name, email, password, targetLanguage, captchaToken, captchaAnswer);
       onAuthenticated(user);
     } catch (requestError) {
       setError(requestError instanceof Error ? requestError.message : 'Không thể kết nối máy chủ tài khoản.');
+      if (!isLogin) void loadCaptcha();
     } finally {
       setBusy(false);
     }
@@ -92,7 +120,7 @@ export function AuthPage({ mode, onNavigate, onAuthenticated }: AuthPageProps) {
               : 'Tạo tài khoản để lưu từ vựng, lịch sử và tiến trình học của bạn.')}
           </p>
 
-          <button type="button" className="au-google" onClick={() => setNotice('Đăng nhập bằng Google sẽ có ở phiên bản chính thức. Bản demo cho phép dùng email bất kỳ để thử.')}>
+          <button type="button" className="au-google" onClick={() => setNotice('Đăng nhập bằng Google chưa được cấu hình. Vui lòng dùng email và mật khẩu.')}>
             <GoogleMark /> {t(isLogin ? 'Đăng nhập bằng Google' : 'Đăng ký bằng Google')}
           </button>
 
@@ -105,6 +133,20 @@ export function AuthPage({ mode, onNavigate, onAuthenticated }: AuthPageProps) {
                 <div><UserRound size={18} /><input value={name} onChange={(event) => setName(event.target.value)} placeholder={t('Tên của bạn')} maxLength={80} autoComplete="name" required /></div>
               </label>
             )}
+            {!isLogin && (
+              <label className="au-field">
+                <span>{t('Ngôn ngữ bạn muốn học')}</span>
+                <div className="au-select-wrap">
+                  <select value={targetLanguage} onChange={(event) => setTargetLanguage(event.target.value as TargetLanguage)}>
+                    <option value="tay">{t('Tiếng Tày')}</option>
+                    <option value="muong">{t('Tiếng Mường')}</option>
+                    <option value="hmong">{t("Tiếng H'Mông")}</option>
+                    <option value="dao">{t('Tiếng Dao')}</option>
+                    <option value="all">{t('Tất cả')}</option>
+                  </select>
+                </div>
+              </label>
+            )}
             <label className="au-field">
               <span>{t('Email')}</span>
               <div><Mail size={18} /><input type="email" value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@example.com" maxLength={254} autoComplete="email" required /></div>
@@ -113,17 +155,44 @@ export function AuthPage({ mode, onNavigate, onAuthenticated }: AuthPageProps) {
               <span>{t('Mật khẩu')}</span>
               <div>
                 <Lock size={18} />
-                <input type={showPassword ? 'text' : 'password'} value={password} onChange={(event) => setPassword(event.target.value)} placeholder={t('Ít nhất 6 ký tự')} minLength={6} maxLength={128} autoComplete={isLogin ? 'current-password' : 'new-password'} required />
+                <input type={showPassword ? 'text' : 'password'} value={password} onChange={(event) => setPassword(event.target.value)} placeholder={t(isLogin ? 'Nhập mật khẩu' : 'Ít nhất 8 ký tự')} minLength={isLogin ? 1 : 8} maxLength={128} autoComplete={isLogin ? 'current-password' : 'new-password'} required />
                 <button type="button" className="au-eye" onClick={() => setShowPassword((current) => !current)} aria-label={t(showPassword ? 'Ẩn mật khẩu' : 'Hiện mật khẩu')}>
                   {showPassword ? <EyeOff size={18} /> : <Eye size={18} />}
                 </button>
               </div>
             </label>
+            {!isLogin && (
+              <div className="au-captcha">
+                <label className="au-field" htmlFor="captcha-answer">
+                  <span>{t('Xác minh bạn là người thật')}</span>
+                  <div className="au-captcha-controls">
+                    <strong aria-live="polite">{captchaLoading ? t('Đang tải...') : captchaQuestion || t('CAPTCHA chưa sẵn sàng')}</strong>
+                    <button type="button" className="au-captcha-refresh" onClick={() => void loadCaptcha()} disabled={captchaLoading} aria-label={t('Tạo CAPTCHA mới')}>
+                      <RefreshCw size={17} />
+                    </button>
+                  </div>
+                  <div>
+                    <input
+                      id="captcha-answer"
+                      type="text"
+                      inputMode="numeric"
+                      pattern="[0-9]*"
+                      value={captchaAnswer}
+                      onChange={(event) => setCaptchaAnswer(event.target.value.replace(/\D/g, '').slice(0, 2))}
+                      placeholder={t('Nhập đáp án')}
+                      required
+                      disabled={!captchaToken || captchaLoading}
+                    />
+                  </div>
+                </label>
+                {captchaError && <div className="au-error" role="alert"><AlertCircle size={16} /> {t(captchaError)}</div>}
+              </div>
+            )}
 
             {error && <div className="au-error" role="alert"><AlertCircle size={16} /> {t(error)}</div>}
             {notice && <div className="au-notice" role="status">{t(notice)}</div>}
 
-            <button className="au-submit" type="submit" disabled={busy}>
+            <button className="au-submit" type="submit" disabled={busy || (!isLogin && (!captchaToken || !captchaAnswer || Boolean(captchaError)))}>
               {t(busy ? 'Đang xử lý...' : isLogin ? 'Đăng nhập' : 'Tạo tài khoản')} <ArrowRight size={17} />
             </button>
           </form>

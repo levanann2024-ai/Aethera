@@ -70,7 +70,7 @@ button:disabled { cursor: not-allowed; opacity: .52; }
 .avatar-small { width: 27px; height: 27px; flex-basis: 27px; font-size: 16px; }
 .mobile-menu { display: none; }
 .mobile-nav-arrow { display: none; }
-.page-content { max-width: 1270px; margin: 0 auto; padding: 48px 42px 64px; }
+.page-content { width: 100%; max-width: 1270px; margin: 0 auto; padding: 48px 42px 64px; }
 .eyebrow { display: flex; align-items: center; gap: 9px; color: var(--brand); text-transform: uppercase; letter-spacing: .13em; font-size: 16px; font-weight: 700; }
 .eyebrow-line { width: 22px; height: 1px; background: #56a992; }
 h1, h2, h3, p { margin-top: 0; }

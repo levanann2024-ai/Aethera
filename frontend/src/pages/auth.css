@@ -37,6 +37,14 @@
 .au-field > div:focus-within { border-color: #2f8f76; box-shadow: 0 0 0 3px rgba(47,143,118,.16); color: #14503f; }
 .au-field input { flex: 1; min-width: 0; min-height: 50px; border: 0; outline: 0; background: transparent; color: #173c36; font: inherit; font-size: 15px; }
 .au-field input:-webkit-autofill { -webkit-box-shadow: 0 0 0 40px #fff inset; }
+.au-field .au-select-wrap { padding-right: 12px; }
+.au-field select { width: 100%; min-height: 50px; border: 0; outline: 0; background: transparent; color: #173c36; font: inherit; font-size: 15px; cursor: pointer; }
+.au-captcha { display: grid; gap: 8px; }
+.au-captcha-controls { justify-content: space-between; min-height: 50px; }
+.au-captcha-controls strong { color: #173c36; font-size: 15px; font-weight: 700; }
+.au-captcha-refresh { display: grid; place-items: center; width: 34px; height: 34px; border: 0; border-radius: 50%; background: transparent; color: #5f7a72; cursor: pointer; }
+.au-captcha-refresh:hover:not(:disabled) { background: #e6f4ec; color: #14503f; }
+.au-captcha-refresh:disabled { opacity: .5; cursor: wait; }
 .au-eye { display: grid; place-items: center; width: 34px; height: 34px; border: 0; border-radius: 50%; background: transparent; color: #7a8f86; cursor: pointer; }
 .au-eye:hover { background: #e6f4ec; color: #14503f; }
 

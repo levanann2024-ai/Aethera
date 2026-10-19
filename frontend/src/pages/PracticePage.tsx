@@ -3,6 +3,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { searchDictionary } from '@/services/api';
 import { useVocabularyProgress } from '@/services/vocabulary-progress';
 import { useLanguage } from '@/i18n/useLanguage';
+import type { User } from '@/types/auth';
 import type { Route } from '@/types/navigation';
 import type { DictionaryEntry } from '@/types/dictionary';
 import { FlashcardMode } from './review/FlashcardMode';
@@ -15,7 +16,7 @@ import './vocabulary.css';
 
 type View = 'modes' | ReviewMode;
 
-export function PracticePage({ onNavigate }: { onNavigate: (route: Route) => void }) {
+export function PracticePage({ onNavigate, user }: { onNavigate: (route: Route) => void; user: User | null }) {
   const { t } = useLanguage();
   const { pinned, learned, setLearned } = useVocabularyProgress();
   const [entries, setEntries] = useState<DictionaryEntry[]>([]);
@@ -29,8 +30,18 @@ export function PracticePage({ onNavigate }: { onNavigate: (route: Route) => voi
     let active = true;
     setLoading(true);
     setError('');
-    searchDictionary(getSettings().defaultLanguage)
-      .then((result) => {
+    const targetLanguage = user?.targetLanguage;
+    const languages = targetLanguage === 'all'
+      ? ['tay', 'muong'] as const
+      : targetLanguage === 'tay' || targetLanguage === 'muong'
+        ? [targetLanguage]
+        : targetLanguage === 'hmong' || targetLanguage === 'dao'
+          ? []
+          : [getSettings().defaultLanguage];
+
+    Promise.all(languages.map((language) => searchDictionary(language)))
+      .then((results) => {
+        const result = results.flat();
         if (active) setEntries(result);
       })
       .catch((requestError: unknown) => {
@@ -42,7 +53,7 @@ export function PracticePage({ onNavigate }: { onNavigate: (route: Route) => voi
         if (active) setLoading(false);
       });
     return () => { active = false; };
-  }, [refreshKey]);
+  }, [refreshKey, user?.targetLanguage]);
 
   const availableDeck = useMemo(
     () => buildDeck(entries, pinned, learned),
@@ -69,6 +80,9 @@ export function PracticePage({ onNavigate }: { onNavigate: (route: Route) => voi
         <ReviewModes
           wordCount={availableDeck.deck.length}
           usePinned={availableDeck.usePinned}
+          emptyMessage={user?.targetLanguage === 'hmong' || user?.targetLanguage === 'dao'
+            ? 'Từ điển ngôn ngữ bạn chọn chưa có dữ liệu để ôn.'
+            : 'Sổ từ vựng chưa có từ nào để ôn.'}
           onPick={startMode}
           onBack={backToVocabulary}
         />
