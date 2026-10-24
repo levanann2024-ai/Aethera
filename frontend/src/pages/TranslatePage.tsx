@@ -3,9 +3,10 @@ import {
   ArrowLeftRight, BookOpen, ClipboardPaste, Copy, FileText, History, Image as ImageIcon,
   Languages, Mic, Search, Star, UploadCloud, Volume2, X
 } from 'lucide-react';
-import { getSettings } from '@/services/settings';
-import { translateText } from '@/services/api';
+import { getSettings, voiceRate } from '@/services/settings';
+import { transcribeAudio, translateImage, translateText } from '@/services/api';
 import type { TranslationMethod } from '@/services/api';
+import type { ImageTranslationRegion } from '@/services/api';
 import { addStudyRecord } from '@/services/study-history';
 import { suggestedVocabularyByLang } from '@/data/sampleDictionary';
 import type { DictionaryMeaning, PhraseLookup, SourceLanguage } from '@/types/dictionary';
@@ -16,39 +17,26 @@ import './translate.css';
 
 type InputKind = 'text' | 'image';
 
-interface SpeechRecognitionResultLike {
-  readonly 0: { transcript: string };
-}
-
-interface SpeechRecognitionEventLike {
-  resultIndex: number;
-  results: ArrayLike<SpeechRecognitionResultLike>;
-}
-
-interface SpeechRecognitionLike {
-  lang: string;
-  continuous: boolean;
-  interimResults: boolean;
-  onstart: (() => void) | null;
-  onresult: ((event: SpeechRecognitionEventLike) => void) | null;
-  onerror: (() => void) | null;
-  onend: (() => void) | null;
-  start(): void;
-  stop(): void;
-}
-
-type SpeechRecognitionConstructor = new () => SpeechRecognitionLike;
-
-declare global {
-  interface Window {
-    SpeechRecognition?: SpeechRecognitionConstructor;
-    webkitSpeechRecognition?: SpeechRecognitionConstructor;
-  }
-}
-
 const MAX_LENGTH = 2000;
 const IMAGE_TYPES = '.jpg,.jpeg,.png,.webp';
 const TTS_MAX_CHUNK_LENGTH = 180;
+const MAX_RECORDING_DURATION_MS = 30_000;
+const SPEECH_SAMPLE_RATE = 16_000;
+
+interface RecordingSession {
+  stream: MediaStream;
+  audioContext: AudioContext;
+  source: MediaStreamAudioSourceNode;
+  processor: ScriptProcessorNode;
+  mutedOutput: GainNode;
+  samples: Float32Array[];
+}
+
+declare global {
+  interface Permissions {
+    query(permissionDesc: { name: 'microphone' }): Promise<PermissionStatus>;
+  }
+}
 
 function splitSpeechText(text: string): string[] {
   const words = text.match(/\S+/g) ?? [];
@@ -67,6 +55,121 @@ function splitSpeechText(text: string): string[] {
 
   if (currentChunk) chunks.push(currentChunk);
   return chunks;
+}
+
+function sampleImageBackgrounds(
+  image: HTMLImageElement | null,
+  regions: ImageTranslationRegion[],
+): ImageTranslationRegion[] {
+  if (!image?.complete || !image.naturalWidth || regions.length === 0) return regions;
+
+  const scale = Math.min(1, 1500 / image.naturalWidth, 1500 / image.naturalHeight);
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
+  canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
+  const context = canvas.getContext('2d', { willReadFrequently: true });
+  if (!context) return regions;
+
+  try {
+    context.drawImage(image, 0, 0, canvas.width, canvas.height);
+    const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data;
+    const pixelAt = (x: number, y: number) => {
+      const offset = (Math.max(0, Math.min(canvas.height - 1, y)) * canvas.width
+        + Math.max(0, Math.min(canvas.width - 1, x))) * 4;
+      return [pixels[offset], pixels[offset + 1], pixels[offset + 2]];
+    };
+    const median = (values: number[]) => {
+      const sorted = [...values].sort((a, b) => a - b);
+      return sorted[Math.floor(sorted.length / 2)];
+    };
+
+    return regions.map((region) => {
+      const [top, left, bottom, right] = region.box;
+      const x1 = Math.round(left / 1000 * canvas.width);
+      const y1 = Math.round(top / 1000 * canvas.height);
+      const x2 = Math.round(right / 1000 * canvas.width);
+      const y2 = Math.round(bottom / 1000 * canvas.height);
+      const gap = Math.max(2, Math.min(8, Math.round(Math.min(x2 - x1, y2 - y1) * 0.04)));
+      const points = [
+        [Math.round((x1 + x2) / 2), y1 - gap],
+        [x1 - gap, Math.round((y1 + y2) / 2)],
+        [x2 + gap, Math.round((y1 + y2) / 2)],
+        [Math.round((x1 + x2) / 2), y2 + gap],
+        [x1 - gap, y1 - gap],
+        [x2 + gap, y1 - gap],
+        [x1 - gap, y2 + gap],
+        [x2 + gap, y2 + gap],
+      ];
+      const samples = points.map(([x, y]) => pixelAt(x, y));
+      const channels = [0, 1, 2].map((channel) => median(samples.map((sample) => sample[channel])));
+      const backgroundColor = `rgb(${channels.join(', ')})`;
+      const luminance = channels[0] * 0.2126 + channels[1] * 0.7152 + channels[2] * 0.0722;
+      return {
+        ...region,
+        backgroundColor,
+        textColor: luminance > 150 ? '#202124' : '#fff',
+      };
+    });
+  } catch (error) {
+    console.warn('Could not sample image backgrounds for translation labels.', error);
+    return regions;
+  }
+}
+
+function encodeWav(samples: Float32Array[], sampleRate: number): Blob {
+  const sampleCount = samples.reduce((total, chunk) => total + chunk.length, 0);
+  const input = new Float32Array(sampleCount);
+  let inputOffset = 0;
+  for (const chunk of samples) {
+    input.set(chunk, inputOffset);
+    inputOffset += chunk.length;
+  }
+
+  const outputCount = Math.ceil(sampleCount * SPEECH_SAMPLE_RATE / sampleRate);
+  const buffer = new ArrayBuffer(44 + outputCount * 2);
+  const view = new DataView(buffer);
+  const writeText = (offset: number, value: string) => {
+    for (let index = 0; index < value.length; index += 1) {
+      view.setUint8(offset + index, value.charCodeAt(index));
+    }
+  };
+
+  writeText(0, 'RIFF');
+  view.setUint32(4, 36 + outputCount * 2, true);
+  writeText(8, 'WAVE');
+  writeText(12, 'fmt ');
+  view.setUint32(16, 16, true);
+  view.setUint16(20, 1, true);
+  view.setUint16(22, 1, true);
+  view.setUint32(24, SPEECH_SAMPLE_RATE, true);
+  view.setUint32(28, SPEECH_SAMPLE_RATE * 2, true);
+  view.setUint16(32, 2, true);
+  view.setUint16(34, 16, true);
+  writeText(36, 'data');
+  view.setUint32(40, outputCount * 2, true);
+
+  for (let index = 0; index < outputCount; index += 1) {
+    const sourcePosition = index * sampleRate / SPEECH_SAMPLE_RATE;
+    const leftIndex = Math.floor(sourcePosition);
+    const rightIndex = Math.min(leftIndex + 1, sampleCount - 1);
+    const fraction = sourcePosition - leftIndex;
+    const sample = input[leftIndex] * (1 - fraction) + input[rightIndex] * fraction;
+    const clamped = Math.max(-1, Math.min(1, sample));
+    view.setInt16(44 + index * 2, clamped < 0 ? clamped * 0x8000 : clamped * 0x7fff, true);
+  }
+
+  return new Blob([buffer], { type: 'audio/wav' });
+}
+
+function disposeRecordingSession(session: RecordingSession): void {
+  session.processor.onaudioprocess = null;
+  session.source.disconnect();
+  session.processor.disconnect();
+  session.mutedOutput.disconnect();
+  session.stream.getTracks().forEach((track) => track.stop());
+  void session.audioContext.close().catch((error: unknown) => {
+    console.error('Could not close microphone audio context.', error);
+  });
 }
 
 const kinds: { id: InputKind; label: string; icon: typeof Languages }[] = [
@@ -94,84 +197,178 @@ export function TranslatePage({ user, onNavigate }: { onNavigate?: (route: Route
   const [imageUrl, setImageUrl] = useState('');
   const [imageReady, setImageReady] = useState(false);
   const [imageLoadError, setImageLoadError] = useState(false);
+  const [imageFile, setImageFile] = useState<File | null>(null);
+  const [imageTranslation, setImageTranslation] = useState<ImageTranslationRegion[] | null>(null);
+  const [imageTranslationWarning, setImageTranslationWarning] = useState('');
+  const [isImageTranslating, setIsImageTranslating] = useState(false);
+  const imageTranslationRequestId = useRef(0);
   const [showOriginalImage, setShowOriginalImage] = useState(true);
   const [dragOver, setDragOver] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
-  const speechAudio = useRef<HTMLAudioElement | null>(null);
+  const sourceImageElement = useRef<HTMLImageElement | null>(null);
   const speechRequestId = useRef(0);
 
   // Speech Recognition state
   const [isListening, setIsListening] = useState(false);
-  const recognitionRef = useRef<SpeechRecognitionLike | null>(null);
+  const [isCheckingMicrophone, setIsCheckingMicrophone] = useState(false);
+  const [isTranscribing, setIsTranscribing] = useState(false);
+  const recordingSession = useRef<RecordingSession | null>(null);
+  const recordingTimer = useRef<number | null>(null);
+  const transcriptionRequestId = useRef(0);
   const mounted = useRef(true);
+
+  const cancelTranscription = () => {
+    transcriptionRequestId.current += 1;
+    setIsTranscribing(false);
+  };
+
+  const cancelImageTranslation = () => {
+    imageTranslationRequestId.current += 1;
+    setIsImageTranslating(false);
+    setImageTranslationWarning('');
+  };
+
+  const discardRecording = () => {
+    if (recordingTimer.current !== null) {
+      window.clearTimeout(recordingTimer.current);
+      recordingTimer.current = null;
+    }
+    const session = recordingSession.current;
+    recordingSession.current = null;
+    if (session) disposeRecordingSession(session);
+    setIsListening(false);
+  };
 
   useEffect(() => {
     mounted.current = true;
     return () => {
       mounted.current = false;
       speechRequestId.current += 1;
-      speechAudio.current?.pause();
-      if (recognitionRef.current) {
-        try {
-          recognitionRef.current.stop();
-        } catch (error) {
-          console.error('Could not stop speech recognition during cleanup.', error);
-        }
-      }
+      transcriptionRequestId.current += 1;
+      if ('speechSynthesis' in window) window.speechSynthesis.cancel();
+      if (recordingTimer.current !== null) window.clearTimeout(recordingTimer.current);
+      const session = recordingSession.current;
+      recordingSession.current = null;
+      if (session) disposeRecordingSession(session);
     };
   }, []);
 
-  const toggleSpeechRecognition = () => {
-    const SpeechRecognitionAPI = window.SpeechRecognition || window.webkitSpeechRecognition;
-    if (!SpeechRecognitionAPI) {
-      setNotice(t('Trình duyệt chưa hỗ trợ nhận diện giọng nói.'));
-      return;
-    }
-
-    if (isListening) {
-      recognitionRef.current?.stop();
-      setIsListening(false);
-      return;
-    }
-
+  const transcribeRecordedAudio = async (audio: Blob) => {
+    transcriptionRequestId.current += 1;
+    const requestId = transcriptionRequestId.current;
+    setIsTranscribing(true);
+    setNotice(t('Đang chuyển giọng nói thành văn bản...'));
     try {
-      const recognition = new SpeechRecognitionAPI();
-      recognition.lang = 'vi-VN';
-      recognition.continuous = false;
-      recognition.interimResults = true;
+      const transcript = await transcribeAudio(audio, sourceLanguage, reverseDirection);
+      if (!mounted.current || requestId !== transcriptionRequestId.current) return;
+      if (!transcript) {
+        setNotice(t('Không nhận được giọng nói. Hãy nói rõ hơn rồi thử lại.'));
+        return;
+      }
+      setSourceText((current) => `${current.trim()} ${transcript}`.trim().slice(0, MAX_LENGTH));
+      setNotice('');
+    } catch (error) {
+      if (mounted.current && requestId === transcriptionRequestId.current) {
+        setNotice(error instanceof Error ? t(error.message) : t('Không thể nhận diện giọng nói.'));
+      }
+    } finally {
+      if (mounted.current && requestId === transcriptionRequestId.current) setIsTranscribing(false);
+    }
+  };
 
-      recognition.onstart = () => {
-        if (!mounted.current) return;
-        setIsListening(true);
-        setNotice(t('Đang nghe...'));
-      };
+  const stopRecording = () => {
+    const session = recordingSession.current;
+    if (!session) return;
+    recordingSession.current = null;
+    if (recordingTimer.current !== null) {
+      window.clearTimeout(recordingTimer.current);
+      recordingTimer.current = null;
+    }
+    disposeRecordingSession(session);
+    setIsListening(false);
+    if (!session.samples.length) {
+      setNotice(t('Không nhận được giọng nói. Hãy nói rõ hơn rồi thử lại.'));
+      return;
+    }
+    void transcribeRecordedAudio(encodeWav(session.samples, session.audioContext.sampleRate));
+  };
 
-      recognition.onresult = (event) => {
-        if (!mounted.current) return;
-        let transcript = '';
-        for (let i = event.resultIndex; i < event.results.length; i++) {
-          transcript += event.results[i][0].transcript;
+  const toggleSpeechRecording = async () => {
+    if (isListening) {
+      stopRecording();
+      return;
+    }
+    if (isCheckingMicrophone || isTranscribing) return;
+    if (!navigator.mediaDevices?.getUserMedia) {
+      setNotice(t('Không thể truy cập microphone. Hãy cấp quyền microphone hoặc nhập văn bản.'));
+      return;
+    }
+    if (!('AudioContext' in window)) {
+      setNotice(t('Trình duyệt chưa hỗ trợ ghi âm.'));
+      return;
+    }
+
+    setIsCheckingMicrophone(true);
+    setNotice(t('Đang kiểm tra quyền microphone...'));
+
+    let stream: MediaStream | null = null;
+    let audioContext: AudioContext | null = null;
+    try {
+      try {
+        const permission = await navigator.permissions.query({ name: 'microphone' });
+        if (permission.state === 'denied') {
+          setNotice(t('Không thể truy cập microphone. Hãy cấp quyền microphone hoặc nhập văn bản.'));
+          return;
         }
-        setSourceText(transcript.slice(0, MAX_LENGTH));
-      };
+      } catch (error) {
+        if (!(error instanceof TypeError)) {
+          console.error('Could not check microphone permission.', error);
+        }
+      }
 
-      recognition.onerror = () => {
-        if (!mounted.current) return;
-        setIsListening(false);
-        setNotice(t('Không thể nhận diện giọng nói.'));
-      };
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      if (!mounted.current) {
+        stream.getTracks().forEach((track) => track.stop());
+        return;
+      }
 
-      recognition.onend = () => {
-        if (!mounted.current) return;
-        setIsListening(false);
-        setNotice('');
+      audioContext = new AudioContext();
+      await audioContext.resume();
+      const source = audioContext.createMediaStreamSource(stream);
+      const processor = audioContext.createScriptProcessor(4096, 1, 1);
+      const mutedOutput = audioContext.createGain();
+      mutedOutput.gain.value = 0;
+      const session: RecordingSession = { stream, audioContext, source, processor, mutedOutput, samples: [] };
+      processor.onaudioprocess = (event) => {
+        if (recordingSession.current === session) {
+          session.samples.push(new Float32Array(event.inputBuffer.getChannelData(0)));
+        }
       };
-
-      recognitionRef.current = recognition;
-      recognition.start();
-    } catch {
-      setIsListening(false);
-      setNotice(t('Không thể khởi động nhận diện giọng nói.'));
+      source.connect(processor);
+      processor.connect(mutedOutput);
+      mutedOutput.connect(audioContext.destination);
+      recordingSession.current = session;
+      setIsListening(true);
+      setNotice(t('Đang ghi âm. Nhấn micro để dừng.'));
+      recordingTimer.current = window.setTimeout(stopRecording, MAX_RECORDING_DURATION_MS);
+    } catch (error) {
+      if (!mounted.current) return;
+      stream?.getTracks().forEach((track) => track.stop());
+      if (audioContext && audioContext.state !== 'closed') {
+        void audioContext.close().catch((closeError: unknown) => {
+          console.error('Could not close microphone audio context after an error.', closeError);
+        });
+      }
+      if (error instanceof DOMException && (error.name === 'NotAllowedError' || error.name === 'SecurityError')) {
+        setNotice(t('Không thể truy cập microphone. Hãy cấp quyền microphone hoặc nhập văn bản.'));
+      } else if (error instanceof DOMException && (error.name === 'NotFoundError' || error.name === 'DevicesNotFoundError')) {
+        setNotice(t('Không tìm thấy microphone. Hãy kết nối microphone hoặc nhập văn bản.'));
+      } else {
+        console.error('Could not start microphone recording.', error);
+        setNotice(t('Không thể bắt đầu ghi âm. Hãy thử lại.'));
+      }
+    } finally {
+      if (mounted.current) setIsCheckingMicrophone(false);
     }
   };
 
@@ -247,6 +444,8 @@ export function TranslatePage({ user, onNavigate }: { onNavigate?: (route: Route
   const translation = translatedText || matchedSegments.map((segment) => segment.meaning).join(' · ');
 
   const lookupCrossReference = (word: string) => {
+    cancelTranscription();
+    cancelImageTranslation();
     setKind('text');
     setSourceLanguage('tay');
     setReverseDirection(false);
@@ -336,6 +535,8 @@ export function TranslatePage({ user, onNavigate }: { onNavigate?: (route: Route
   };
 
   const resetInput = () => {
+    cancelTranscription();
+    cancelImageTranslation();
     setSourceText('');
     setLookup(null);
     setTranslatedText('');
@@ -347,10 +548,10 @@ export function TranslatePage({ user, onNavigate }: { onNavigate?: (route: Route
     setImageUrl('');
     setImageReady(false);
     setImageLoadError(false);
-    if (isListening && recognitionRef.current) {
-      recognitionRef.current.stop();
-      setIsListening(false);
-    }
+    setImageFile(null);
+    setImageTranslation(null);
+    sourceImageElement.current = null;
+    discardRecording();
   };
 
   const switchKind = (next: InputKind) => {
@@ -360,6 +561,9 @@ export function TranslatePage({ user, onNavigate }: { onNavigate?: (route: Route
   };
 
   const switchDirection = () => {
+    cancelTranscription();
+    cancelImageTranslation();
+    setImageTranslation(null);
     setReverseDirection((prev) => !prev);
     setSourceText('');
     setLookup(null);
@@ -423,30 +627,36 @@ export function TranslatePage({ user, onNavigate }: { onNavigate?: (route: Route
 
     speechRequestId.current += 1;
     const requestId = speechRequestId.current;
-    speechAudio.current?.pause();
+    if (!('speechSynthesis' in window)) {
+      setNotice(t('Trình duyệt chưa hỗ trợ đọc thành tiếng.'));
+      return;
+    }
+    const synthesis = window.speechSynthesis;
+    synthesis.cancel();
     setNotice('');
 
     const chunks = splitSpeechText(text);
     let chunkIndex = 0;
     const playNextChunk = () => {
       if (requestId !== speechRequestId.current || chunkIndex >= chunks.length) return;
-      const audioUrl = `https://translate.google.com/translate_tts?ie=UTF-8&q=${encodeURIComponent(chunks[chunkIndex])}&tl=vi&client=tw-ob`;
-      const audio = new Audio(audioUrl);
-      speechAudio.current = audio;
-      audio.onended = () => {
-        chunkIndex += 1;
-        playNextChunk();
-      };
-      audio.onerror = () => {
-        if (requestId === speechRequestId.current) {
-          setNotice(t('Không thể phát giọng đọc trực tuyến. Hãy kiểm tra kết nối mạng rồi thử lại.'));
-        }
-      };
-      void audio.play().catch(() => {
-        if (requestId === speechRequestId.current) {
-          setNotice(t('Không thể phát giọng đọc trực tuyến. Hãy kiểm tra kết nối mạng rồi thử lại.'));
-        }
-      });
+      try {
+        const utterance = new SpeechSynthesisUtterance(chunks[chunkIndex]);
+        utterance.lang = 'vi-VN';
+        utterance.rate = voiceRate();
+        utterance.onend = () => {
+          chunkIndex += 1;
+          playNextChunk();
+        };
+        utterance.onerror = () => {
+          if (requestId === speechRequestId.current) {
+            setNotice(t('Không phát được giọng đọc. Hãy kiểm tra cài đặt âm thanh của thiết bị.'));
+          }
+        };
+        synthesis.speak(utterance);
+      } catch (error) {
+        console.error('Could not start speech synthesis.', error);
+        setNotice(t('Không phát được giọng đọc. Hãy kiểm tra cài đặt âm thanh của thiết bị.'));
+      }
     };
 
     playNextChunk();
@@ -461,13 +671,31 @@ export function TranslatePage({ user, onNavigate }: { onNavigate?: (route: Route
       setNotice(t('Chỉ hỗ trợ tệp .jpg, .jpeg, .png, .webp.'));
       return;
     }
+    if (file.size > 8 * 1024 * 1024) {
+      setNotice(t('Ảnh không được vượt quá 8 MB.'));
+      return;
+    }
+    cancelImageTranslation();
+    const mimeByExtension = {
+      '.jpg': 'image/jpeg',
+      '.jpeg': 'image/jpeg',
+      '.png': 'image/png',
+      '.webp': 'image/webp',
+    } as const;
+    const mimeType = file.type === 'image/jpeg' || file.type === 'image/png' || file.type === 'image/webp'
+      ? file.type
+      : mimeByExtension[ext as keyof typeof mimeByExtension];
+    const normalizedFile = file.type === mimeType ? file : new File([file], file.name, { type: mimeType });
     setFileName(file.name);
     setImageReady(false);
     setImageLoadError(false);
-    const nextImageUrl = URL.createObjectURL(file);
+    setImageFile(normalizedFile);
+    setImageTranslation(null);
+    const nextImageUrl = URL.createObjectURL(normalizedFile);
     setImageUrl(nextImageUrl);
     setSourceText('');
     const previewImage = new Image();
+    sourceImageElement.current = previewImage;
     previewImage.onload = () => setImageReady(true);
     previewImage.onerror = () => {
       setImageReady(false);
@@ -475,6 +703,33 @@ export function TranslatePage({ user, onNavigate }: { onNavigate?: (route: Route
       setNotice(t('Không thể tải ảnh này. Vui lòng thử một tệp khác.'));
     };
     previewImage.src = nextImageUrl;
+  };
+
+  const runImageTranslation = async () => {
+    if (!imageFile || isImageTranslating) return;
+    imageTranslationRequestId.current += 1;
+    const requestId = imageTranslationRequestId.current;
+    setIsImageTranslating(true);
+    setImageTranslation(null);
+    setImageTranslationWarning('');
+    setNotice('');
+    try {
+      const result = await translateImage(imageFile, sourceLanguage, reverseDirection);
+      if (requestId !== imageTranslationRequestId.current) return;
+      setImageTranslation(sampleImageBackgrounds(sourceImageElement.current, result.regions));
+      if (result.warning) {
+        setImageTranslationWarning(result.warning);
+        setNotice(t(result.warning));
+      } else if (result.regions.length === 0) {
+        setNotice(t('Không tìm thấy chữ có thể đọc trong ảnh.'));
+      }
+    } catch (error) {
+      if (requestId === imageTranslationRequestId.current) {
+        setNotice(error instanceof Error ? t(error.message) : t('Không thể dịch chữ trong ảnh lúc này. Vui lòng thử lại.'));
+      }
+    } finally {
+      if (requestId === imageTranslationRequestId.current) setIsImageTranslating(false);
+    }
   };
 
   const onDrop = (event: React.DragEvent) => {
@@ -492,7 +747,12 @@ export function TranslatePage({ user, onNavigate }: { onNavigate?: (route: Route
           role="tab"
           aria-selected={sourceLanguage === code}
           className={`gt-tab ${sourceLanguage === code ? 'gt-tab-active' : ''}`}
-          onClick={() => setSourceLanguage(code)}
+          onClick={() => {
+            cancelTranscription();
+            cancelImageTranslation();
+            setImageTranslation(null);
+            setSourceLanguage(code);
+          }}
         >
           {t(code === 'tay' ? 'Tày' : 'Mường')}
         </button>
@@ -697,10 +957,24 @@ export function TranslatePage({ user, onNavigate }: { onNavigate?: (route: Route
               <div className="gt-toolbar">
                 <button 
                   type="button" 
-                  className={`gt-icon ${isListening ? 'gt-icon-active' : ''}`} 
-                  onClick={toggleSpeechRecognition} 
-                  aria-label={t(isListening ? 'Dừng ghi âm' : 'Nhấn để nói')} 
-                  title={t(isListening ? 'Dừng ghi âm' : 'Nhấn để nói')}
+                  className={`gt-icon ${isListening ? 'gt-icon-active' : ''}`}
+                  onClick={() => void toggleSpeechRecording()}
+                  disabled={isCheckingMicrophone || isTranscribing}
+                  aria-busy={isCheckingMicrophone || isTranscribing}
+                  aria-label={t(isCheckingMicrophone
+                    ? 'Đang kiểm tra quyền microphone...'
+                    : isTranscribing
+                      ? 'Đang chuyển giọng nói thành văn bản...'
+                      : isListening
+                        ? 'Dừng ghi âm'
+                        : 'Nhấn để nói')}
+                  title={t(isCheckingMicrophone
+                    ? 'Đang kiểm tra quyền microphone...'
+                    : isTranscribing
+                      ? 'Đang chuyển giọng nói thành văn bản...'
+                      : isListening
+                        ? 'Dừng ghi âm'
+                        : 'Nhấn để nói')}
                 >
                   <Mic size={20} color={isListening ? '#ef4444' : undefined} />
                 </button>
@@ -717,6 +991,7 @@ export function TranslatePage({ user, onNavigate }: { onNavigate?: (route: Route
                 <span className="gt-toolbar-spacer" />
                 <span className="gt-count">{sourceText.length} / {MAX_LENGTH}</span>
               </div>
+              <small className="gt-privacy-note">{t('Giọng nói sẽ được gửi đến Gemini để chuyển thành văn bản.')}</small>
             </div>
             {resultPanel}
           </section>
@@ -757,6 +1032,15 @@ export function TranslatePage({ user, onNavigate }: { onNavigate?: (route: Route
                 />
               </label>
               <span className="gt-image-file"><FileText size={16} />{fileName}</span>
+              <button
+                type="button"
+                className="gt-image-action gt-image-translate"
+                onClick={() => void runImageTranslation()}
+                disabled={!imageReady || isImageTranslating}
+              >
+                <Languages size={16} />
+                {t(isImageTranslating ? 'Đang nhận diện và dịch...' : 'Dịch chữ trong ảnh')}
+              </button>
               <button type="button" className="gt-image-action" onClick={() => fileInput.current?.click()}>
                 <UploadCloud size={16} />{t('Chọn ảnh khác')}
               </button>
@@ -787,24 +1071,72 @@ export function TranslatePage({ user, onNavigate }: { onNavigate?: (route: Route
                     </div>
                   )}
                   <div className="gt-image-panel">
-                    <div className="gt-image-panel-title">{t('Ảnh đã dịch')} <span>{t('Bản xem trước')}</span></div>
+                    <div className="gt-image-panel-title">
+                      {t('Bản dịch phủ lên ảnh')}
+                      {imageTranslation && imageTranslation.length > 0 && (
+                        <span>{imageTranslation.length} {t('vùng chữ')}</span>
+                      )}
+                    </div>
                     <div className="gt-image-frame">
-                      <img
-                        src={imageUrl}
-                        alt={`${t('Bản xem trước chưa dịch')}: ${fileName}`}
-                        onLoad={() => setImageReady(true)}
-                        onError={() => {
-                          setImageReady(false);
-                          setImageLoadError(true);
-                          setNotice(t('Không thể tải ảnh này. Vui lòng thử một tệp khác.'));
-                        }}
-                      />
+                      {isImageTranslating ? (
+                        <div className="gt-image-loading" role="status">
+                          <span className="gt-spinner" />
+                          <span>{t('Đang nhận diện và dịch chữ trong ảnh...')}</span>
+                        </div>
+                      ) : (
+                        <div className="gt-image-artboard">
+                          <img
+                            src={imageUrl}
+                            alt={`${t('Ảnh gốc với bản dịch phủ lên chữ')}: ${fileName}`}
+                            onLoad={() => setImageReady(true)}
+                            onError={() => {
+                              setImageReady(false);
+                              setImageLoadError(true);
+                              setNotice(t('Không thể tải ảnh này. Vui lòng thử một tệp khác.'));
+                            }}
+                          />
+                          {imageTranslation?.map(({ text, translation, box, backgroundColor, textColor }, index) => (
+                            <span
+                              key={`${index}-${text}`}
+                              className="gt-image-translation-label"
+                              style={{
+                                top: `${box[0] / 10}%`,
+                                left: `${box[1] / 10}%`,
+                                width: `${(box[3] - box[1]) / 10}%`,
+                                height: `${(box[2] - box[0]) / 10}%`,
+                                backgroundColor,
+                                color: textColor,
+                              }}
+                              title={`${text} → ${translation}`}
+                            >
+                              {translation}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                      {!isImageTranslating && !imageTranslation && (
+                        <div className={`gt-image-result-status ${notice ? 'gt-image-result-error' : ''}`} role={notice ? 'alert' : 'status'}>
+                          {notice || t('Chưa có bản dịch. Nhấn “Dịch chữ trong ảnh” để bắt đầu.')}
+                        </div>
+                      )}
+                      {!isImageTranslating && imageTranslation?.length === 0 && (
+                        <div className="gt-image-result-status" role="status">
+                          {notice || t('Không có vùng chữ nào được dịch để phủ lên ảnh.')}
+                        </div>
+                      )}
+                      {!isImageTranslating && imageTranslationWarning && imageTranslation && imageTranslation.length > 0 && (
+                        <div className="gt-image-result-status gt-image-result-error" role="status">
+                          {t(imageTranslationWarning)}
+                        </div>
+                      )}
                     </div>
                   </div>
                 </div>
-                <div className="gt-image-notice" role="status">
-                  {t('Dịch ảnh chưa khả dụng. Ảnh bên phải vẫn là bản gốc; đây chỉ là bản xem trước.')}
-                </div>
+                {!imageTranslation && !isImageTranslating && (
+                  <div className="gt-image-notice" role="status">
+                    {t('Ảnh sẽ được gửi tới Gemini để nhận diện và phủ bản dịch lên ảnh khi bạn nhấn nút dịch.')}
+                  </div>
+                )}
               </>
             )}
           </section>

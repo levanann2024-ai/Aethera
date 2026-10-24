@@ -11,12 +11,23 @@ const allowedOrigins = (process.env.FRONTEND_ORIGINS ?? 'http://localhost:5173,h
   .filter(Boolean);
 
 app.use(cors({ origin: allowedOrigins }));
+app.use('/api/ai/image-translate', express.json({ limit: '12mb' }));
+app.use('/api/ai/transcribe', express.json({ limit: '3mb' }));
 app.use(express.json());
 app.use('/api', apiRouter);
 
 const errorHandler: ErrorRequestHandler = (error, _req, res, _next) => {
   console.error(error);
-  res.status(500).json({ error: 'Internal server error.' });
+  const isPayloadTooLarge = typeof error === 'object'
+    && error !== null
+    && 'type' in error
+    && error.type === 'entity.too.large';
+  const isImageTranslationRequest = _req.path.startsWith('/api/ai/image-translate');
+  res.status(isPayloadTooLarge ? 413 : 500).json({
+    error: isPayloadTooLarge
+      ? isImageTranslationRequest ? 'Ảnh vượt quá dung lượng cho phép.' : 'Bản ghi âm vượt quá dung lượng cho phép.'
+      : 'Internal server error.',
+  });
 };
 
 app.use(errorHandler);

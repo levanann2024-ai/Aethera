@@ -2,12 +2,13 @@
 .content-shell-ai .topbar { background: transparent; border-bottom: 0; }
 .content-shell-ai .page-content { max-width: none; margin: 0; padding: 0; }
 
-.aic-launch { display: grid; gap: 32px; max-width: 1320px; margin: 0 auto; padding: 32px clamp(20px, 4vw, 56px) 56px; }
+.aic-launch { display: grid; gap: 32px; max-width: 1320px; min-width: 0; margin: 0 auto; padding: 32px clamp(20px, 4vw, 56px) 56px; }
+.aic-launch > * { min-width: 0; }
 .aic-kicker { color: #1f7a63; font-size: 11px; font-weight: 800; letter-spacing: .08em; }
 .aic-launch h1 { margin: 8px 0 10px; color: #14503f; font-family: 'Plus Jakarta Sans', sans-serif; font-size: 38px; line-height: 1.15; letter-spacing: -.02em; }
 .aic-launch header p { margin: 0; color: #5f7a72; font-size: 15px; }
 .aic-cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 20px; width: min(100%, 980px); margin: 0 auto; }
-.aic-card { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; min-height: 290px; padding: 24px 20px; border: 1px solid #ebf0e4; border-radius: 26px; background: #fffef9; box-shadow: 0 8px 22px rgba(34,80,63,.08); color: inherit; font: inherit; text-align: left; cursor: pointer; transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease; }
+.aic-card { display: flex; flex-direction: column; align-items: flex-start; gap: 10px; width: 100%; min-width: 0; min-height: 290px; padding: 24px 20px; border: 1px solid #ebf0e4; border-radius: 26px; background: #fffef9; box-shadow: 0 8px 22px rgba(34,80,63,.08); color: inherit; font: inherit; text-align: left; cursor: pointer; transition: transform .18s ease, box-shadow .18s ease, border-color .18s ease; }
 .aic-card:hover { transform: translateY(-4px); border-color: #cfe2d8; box-shadow: 0 16px 30px rgba(34,80,63,.12); }
 .aic-card-icon { display: grid; place-items: center; width: 92px; height: 92px; margin-bottom: auto; border-radius: 26px; transform: rotate(-6deg); }
 .aic-card-icon svg { width: 40px; height: 40px; }
@@ -45,10 +46,14 @@
 @media (max-width: 760px) {
   .aic-launch h1 { font-size: 30px; }
   .aic-cards { grid-template-columns: 1fr; }
-  .aic-card { min-height: 0; flex-direction: row; flex-wrap: wrap; align-items: center; }
-  .aic-card-icon { margin: 0 8px 0 0; width: 56px; height: 56px; }
-  .aic-card strong { flex: 1; }
-  .aic-card > span:last-child { flex: 1 1 100%; }
+  .aic-cards > .aic-card { display: grid; grid-template-columns: 56px minmax(0, 1fr); grid-template-rows: auto auto; align-items: center; flex-direction: initial; column-gap: 14px; row-gap: 6px; min-height: 0; padding: 18px 16px; text-align: left; }
+  .aic-cards .aic-card-icon { grid-column: 1; grid-row: 1 / span 2; margin: 0; width: 56px; height: 56px; }
+  .aic-cards .aic-card > strong { grid-column: 2; min-width: 0; margin: 0; }
+  .aic-cards .aic-card > span:last-child { grid-column: 2; min-width: 0; overflow-wrap: anywhere; }
+  .aic-ask { width: 100%; min-width: 0; }
+  .aic-ask > div { align-items: stretch; }
+  .aic-ask > div > input { width: 0; }
+  .aic-ask button { flex: 0 0 auto; padding: 0 16px; }
   .aic-audience-options { grid-template-columns: 1fr; }
   .aic-audience-option { min-height: 76px; }
 }

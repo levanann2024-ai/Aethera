@@ -114,6 +114,50 @@ export async function searchVocabulary(
   return rows.map((row) => parseVocabularyEntry(row));
 }
 
+export async function searchVocabularyBatch(
+  language: SourceLanguage,
+  terms: string[],
+  direction: SearchDirection,
+): Promise<Array<{ index: number; entry: VocabularyEntry }>> {
+  if (terms.length === 0) return [];
+
+  const input = JSON.stringify(terms.map((text, index) => ({ index, text })));
+  const rows = await sql`
+    WITH input AS (
+      SELECT item.index, item.text
+      FROM jsonb_to_recordset(${input}::jsonb) AS item(index integer, text text)
+    )
+    SELECT input.index, vocabulary.word, vocabulary.language, vocabulary.meanings
+    FROM input
+    JOIN vocabulary
+      ON vocabulary.language = ${language}
+      AND (
+        (${direction} = 'tay-to-viet' AND lower(vocabulary.word) = lower(input.text))
+        OR (
+          ${direction} = 'viet-to-tay'
+          AND EXISTS (
+            SELECT 1
+            FROM jsonb_array_elements(vocabulary.meanings) AS meaning
+            CROSS JOIN LATERAL jsonb_array_elements_text(
+              CASE
+                WHEN jsonb_typeof(meaning.value->'definitions') = 'array'
+                THEN meaning.value->'definitions'
+                ELSE '[]'::jsonb
+              END
+            ) AS definition(value)
+            WHERE lower(definition.value) = lower(input.text)
+          )
+        )
+      )
+    ORDER BY input.index, vocabulary.word
+  `;
+
+  return rows.map((row) => ({
+    index: Number(row.index),
+    entry: parseVocabularyEntry(row),
+  }));
+}
+
 export async function addVocabularyEntry(
   entry: Omit<VocabularyEntry, 'id' | 'meanings'>,
 ): Promise<VocabularyEntry> {

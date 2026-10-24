@@ -404,6 +404,117 @@ export async function sendAIChat(
   return payload.response.trim();
 }
 
+export async function transcribeAudio(
+  audio: Blob,
+  language: SourceLanguage,
+  reverseDirection: boolean,
+): Promise<string> {
+  if (audio.type !== 'audio/wav' || audio.size <= 44) {
+    throw new Error('Bản ghi âm không hợp lệ. Hãy ghi âm lại rồi thử lại.');
+  }
+
+  const bytes = new Uint8Array(await audio.arrayBuffer());
+  let binary = '';
+  const chunkSize = 0x8000;
+  for (let offset = 0; offset < bytes.length; offset += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(offset, offset + chunkSize));
+  }
+  const response = await fetch(`${API_BASE_URL}/ai/transcribe`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ audioBase64: btoa(binary), mimeType: audio.type, language, reverseDirection }),
+  });
+  if (!response.ok) throw await responseError(response, 'Không thể nhận diện giọng nói lúc này. Vui lòng thử lại.');
+
+  const payload: unknown = await response.json();
+  if (
+    typeof payload !== 'object'
+    || payload === null
+    || !('transcript' in payload)
+    || typeof payload.transcript !== 'string'
+  ) {
+    throw new Error('Dịch vụ nhận dạng giọng nói trả về dữ liệu không hợp lệ.');
+  }
+  return payload.transcript.trim();
+}
+
+export interface ImageTranslationRegion {
+  text: string;
+  translation: string;
+  box: [number, number, number, number];
+  backgroundColor?: string;
+  textColor?: string;
+}
+
+export interface ImageTranslationResult {
+  regions: ImageTranslationRegion[];
+  warning?: string;
+}
+
+export async function translateImage(
+  image: Blob,
+  language: SourceLanguage,
+  reverseDirection: boolean,
+): Promise<ImageTranslationResult> {
+  const allowedTypes = new Set(['image/jpeg', 'image/png', 'image/webp']);
+  if (!allowedTypes.has(image.type) || image.size === 0 || image.size > 8 * 1024 * 1024) {
+    throw new Error('Ảnh vượt quá dung lượng cho phép hoặc định dạng không được hỗ trợ.');
+  }
+
+  const bytes = new Uint8Array(await image.arrayBuffer());
+  let binary = '';
+  const chunkSize = 0x8000;
+  for (let offset = 0; offset < bytes.length; offset += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(offset, offset + chunkSize));
+  }
+
+  const response = await fetch(`${API_BASE_URL}/ai/image-translate`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      imageBase64: btoa(binary),
+      mimeType: image.type,
+      language,
+      reverseDirection,
+    }),
+  });
+  if (!response.ok) throw await responseError(response, 'Không thể dịch chữ trong ảnh lúc này. Vui lòng thử lại.');
+
+  const payload: unknown = await response.json();
+  if (
+    typeof payload !== 'object'
+    || payload === null
+    || !('regions' in payload)
+    || !Array.isArray(payload.regions)
+    || payload.regions.length > 100
+    || ('warning' in payload && payload.warning !== undefined && typeof payload.warning !== 'string')
+    || !payload.regions.every((region: unknown) => {
+      if (typeof region !== 'object' || region === null || Array.isArray(region)) return false;
+      const value = region as Record<string, unknown>;
+      return typeof value.text === 'string'
+        && value.text.trim().length > 0
+        && value.text.length <= 1000
+        && typeof value.translation === 'string'
+        && value.translation.trim().length > 0
+        && value.translation.length <= 1000
+        && Array.isArray(value.box)
+        && value.box.length === 4
+        && value.box.every((coordinate: unknown) => (
+          typeof coordinate === 'number' && Number.isFinite(coordinate) && coordinate >= 0 && coordinate <= 1000
+        ))
+        && value.box[0] < value.box[2]
+        && value.box[1] < value.box[3];
+    })
+  ) {
+    throw new Error('Dịch vụ dịch ảnh trả về dữ liệu không hợp lệ.');
+  }
+
+  return {
+    regions: payload.regions as ImageTranslationRegion[],
+    warning: 'warning' in payload ? payload.warning as string | undefined : undefined,
+  };
+}
+
 // ==========================================
 // 1. LOOKUP PHRASE (Tày -> Việt) - 3 BƯỚC
 // ==========================================
