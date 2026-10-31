@@ -10,10 +10,10 @@ const allowedOrigins = (process.env.FRONTEND_ORIGINS ?? 'http://localhost:5173,h
   .map((origin) => origin.trim())
   .filter(Boolean);
 
-const vercelOriginPattern = /^https:\/\/(?:[a-z0-9-]+\.)?vercel\.app$/i;
+allowedOrigins.push('https://aethera-jet.vercel.app', 'https://vercel.app');
 app.use(cors({
   origin: (origin, callback) => {
-    callback(null, !origin || allowedOrigins.includes(origin) || vercelOriginPattern.test(origin));
+    callback(null, !origin || allowedOrigins.includes(origin));
   },
 }));
 app.use('/api/ai/image-translate', express.json({ limit: '12mb' }));
