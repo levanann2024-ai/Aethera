@@ -14,6 +14,7 @@ allowedOrigins.push(
   'https://aethera-jet.vercel.app',
   'https://vercel.app',
   'https://aethera-o0x7cxht2-eduflow5.vercel.app',
+  'https://aethera-3klbzx9x4y-eduflow5.vercel.app',
 );
 app.use(cors({
   origin: (origin, callback) => {
