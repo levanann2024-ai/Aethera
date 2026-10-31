@@ -10,7 +10,11 @@ const allowedOrigins = (process.env.FRONTEND_ORIGINS ?? 'http://localhost:5173,h
   .map((origin) => origin.trim())
   .filter(Boolean);
 
-allowedOrigins.push('https://aethera-jet.vercel.app', 'https://vercel.app');
+allowedOrigins.push(
+  'https://aethera-jet.vercel.app',
+  'https://vercel.app',
+  'https://aethera-o0x7cxht2-eduflow5.vercel.app',
+);
 app.use(cors({
   origin: (origin, callback) => {
     callback(null, !origin || allowedOrigins.includes(origin));

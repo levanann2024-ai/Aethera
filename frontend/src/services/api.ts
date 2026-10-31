@@ -11,7 +11,7 @@ export interface TextTranslation {
   meanings?: DictionaryMeaning[];
 }
 
-const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL?.trim() || '/api').replace(/\/+$/, '');
+const API_URL = 'https://aethera-oyn2.onrender.com/api';
 
 export type ChatLanguage = 'tay' | 'muong' | 'thai' | 'hmong' | 'dao' | 'all';
 export type ChatHistoryMessage = { role: 'user' | 'model'; text: string };
@@ -55,7 +55,7 @@ async function fetchDictionaryEntries(
   direction: 'tay-to-viet' | 'viet-to-tay' = 'tay-to-viet',
 ): Promise<DictionaryEntry[]> {
   const params = new URLSearchParams({ language, q: query, direction });
-  const response = await fetch(`${API_BASE_URL}/dictionary?${params}`);
+  const response = await fetch(`${API_URL}/dictionary?${params}`);
   if (!response.ok) {
     throw new Error(`Dictionary request failed with HTTP ${response.status}.`);
   }
@@ -255,7 +255,7 @@ function saveAuthenticatedSession(response: AuthResponse): User {
 }
 
 export async function requestCaptcha(): Promise<CaptchaChallenge> {
-  const response = await fetch(`${API_BASE_URL}/auth/captcha`);
+  const response = await fetch(`${API_URL}/auth/captcha`);
   if (!response.ok) throw await responseError(response, 'Không thể tạo CAPTCHA.');
   const challenge: unknown = await response.json();
   if (
@@ -295,7 +295,7 @@ export async function registerAccount(
   captchaToken: string,
   captchaAnswer: string,
 ): Promise<User> {
-  const response = await fetch(`${API_BASE_URL}/auth/register`, {
+  const response = await fetch(`${API_URL}/auth/register`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -312,7 +312,7 @@ export async function registerAccount(
 
 export async function loginAccount(email: string, password: string): Promise<User> {
   if (!email.trim() || !password) throw new Error('Email hoặc mật khẩu chưa đúng.');
-  const response = await fetch(`${API_BASE_URL}/auth/login`, {
+  const response = await fetch(`${API_URL}/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ email, password }),
@@ -327,7 +327,7 @@ export async function getCurrentUser(): Promise<User | null> {
     activeUser = null;
     return null;
   }
-  const response = await fetch(`${API_BASE_URL}/auth/me`, {
+  const response = await fetch(`${API_URL}/auth/me`, {
     headers: { Authorization: `Bearer ${token}` },
   });
   if (response.status === 401) {
@@ -355,7 +355,7 @@ export async function savePreferredLanguage(preferredLanguage: TargetLanguage): 
   const token = localStorage.getItem(AUTH_TOKEN_KEY);
   if (!token) throw new Error('Vui lòng đăng nhập lại để đổi ngôn ngữ học.');
 
-  const response = await fetch(`${API_BASE_URL}/auth/me`, {
+  const response = await fetch(`${API_URL}/auth/me`, {
     method: 'PATCH',
     headers: {
       Authorization: `Bearer ${token}`,
@@ -384,7 +384,7 @@ export async function sendAIChat(
   audience: ChatAudience,
   history: ChatHistoryMessage[],
 ): Promise<string> {
-  const response = await fetch(`${API_BASE_URL}/ai/chat`, {
+  const response = await fetch(`${API_URL}/ai/chat`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ message, language, audience, history }),
@@ -419,7 +419,7 @@ export async function transcribeAudio(
   for (let offset = 0; offset < bytes.length; offset += chunkSize) {
     binary += String.fromCharCode(...bytes.subarray(offset, offset + chunkSize));
   }
-  const response = await fetch(`${API_BASE_URL}/ai/transcribe`, {
+  const response = await fetch(`${API_URL}/ai/transcribe`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ audioBase64: btoa(binary), mimeType: audio.type, language, reverseDirection }),
@@ -468,7 +468,7 @@ export async function translateImage(
     binary += String.fromCharCode(...bytes.subarray(offset, offset + chunkSize));
   }
 
-  const response = await fetch(`${API_BASE_URL}/ai/image-translate`, {
+  const response = await fetch(`${API_URL}/ai/image-translate`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
@@ -716,7 +716,7 @@ export async function lookupVietnameseToEthnic(language: SourceLanguage, text: s
 
 export async function addDictionaryEntry(entry: Omit<DictionaryEntry, 'id'>): Promise<DictionaryEntry> {
   requireSignedInUser();
-  const response = await fetch(`${API_BASE_URL}/dictionary`, {
+  const response = await fetch(`${API_URL}/dictionary`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({
