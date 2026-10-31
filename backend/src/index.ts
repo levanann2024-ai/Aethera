@@ -10,7 +10,12 @@ const allowedOrigins = (process.env.FRONTEND_ORIGINS ?? 'http://localhost:5173,h
   .map((origin) => origin.trim())
   .filter(Boolean);
 
-app.use(cors({ origin: allowedOrigins }));
+const vercelOriginPattern = /^https:\/\/(?:[a-z0-9-]+\.)?vercel\.app$/i;
+app.use(cors({
+  origin: (origin, callback) => {
+    callback(null, !origin || allowedOrigins.includes(origin) || vercelOriginPattern.test(origin));
+  },
+}));
 app.use('/api/ai/image-translate', express.json({ limit: '12mb' }));
 app.use('/api/ai/transcribe', express.json({ limit: '3mb' }));
 app.use(express.json());
